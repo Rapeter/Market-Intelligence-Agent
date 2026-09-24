@@ -161,15 +161,15 @@ export interface BusinessResearchToolPort {
 ### Task 8: Build the research workspace and monitoring/evaluation views
 
 **Files:**
-- Create: `packages/ui/src/components/businessResearch/BusinessResearchWorkspace.tsx`, child panels and tests
+- Create: `packages/ui/src/components/businessResearch/BusinessResearchWorkspace.tsx` with co-located panels and tests
 - Create: `packages/ui/src/atoms/businessResearchAtoms.ts`, tests
-- Modify: `packages/ui/src/client.tsx`, `packages/ui/src/components/layout/AppShell.tsx`, `packages/ui/src/components/workspace/FinanceWorkspace.tsx`, `packages/ui/src/components/layout/WorkspaceTopbar.tsx`, both locale research/navigation dictionaries
+- Modify: `packages/ui/src/atoms/index.ts`, `packages/ui/src/atoms/workspaceAtoms.ts`, `packages/ui/src/components/workspace/FinanceWorkspace.tsx`, `packages/ui/src/components/layout/WorkspaceTopbar.tsx`, `packages/ui/src/components/layout/Sidebar.tsx`, and both locale research/navigation dictionaries
 
-- [ ] Add enterprise input form for industry, question, 2–4 competitors and strategy; show dynamically selected task facets in the run timeline; support fixture mode and explicit live-search key status.
-- [ ] Show decision timeline, current action, evidence grade, source links, claim citations, conflict/unknown states, partial/failure/cancel states, saved reports and report diffs.
-- [ ] Add monitoring subscribe/pause/remove controls with next-check and last-check reason, and evaluation results showing numerator, denominator, sample count, p50/p95, and fixture/live label.
-- [ ] Follow existing client/atom/i18n patterns; add accessible keyboard controls and narrow-screen layout.
-- [ ] Run UI unit tests and `bun run --filter @finagent/ui typecheck`; commit and push `feat: add business research workspace`.
+- [x] Add enterprise input form for industry, question, 2–4 competitors and strategy; show dynamically selected task facets in the run timeline; support fixture mode and explicit live-search key status.
+- [x] Show decision timeline, current action, evidence grade, source links, claim citations, conflict/unknown states, partial/failure/cancel states, saved reports and report diffs.
+- [x] Add monitoring subscribe/pause/remove controls with next-check and last-check reason, and evaluation results showing numerator, denominator, sample count, p50/p95, and fixture/live label.
+- [x] Follow existing client/atom/i18n patterns; add accessible keyboard controls and narrow-screen layout.
+- [x] Run UI unit tests and `bun run --filter @finagent/ui typecheck`; commit and push `feat: add business research workspace`.
 
 ### Task 9: Demonstrate dynamic decisions and automatic public-information triggers
 
