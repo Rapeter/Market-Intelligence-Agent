@@ -72,10 +72,10 @@ export interface BusinessResearchTaskInput {
 }
 ```
 
-- [ ] Add branded IDs and discriminated unions for six task ids, three strategy ids, evidence/source grades, report claims, run states, and terminal outcomes.
-- [ ] Implement input normalization/validation and catalog completeness checks; ensure no securities-symbol assumptions leak into the domain.
-- [ ] Test invalid competitors, blank questions, unsupported dates, all six unique tasks, all three strategies, and their task weights.
-- [ ] Run `bun test packages/core/src/business-research.test.ts packages/shared/src/business-research/catalog.test.ts`; commit and push `feat: define business research domain and catalog`.
+- [x] Add branded entity IDs and discriminated unions for six task ids, three strategy ids, evidence/source grades, report claims, run states, and terminal outcomes.
+- [x] Implement input normalization/validation and catalog completeness checks; ensure no securities-symbol assumptions leak into the domain.
+- [x] Test invalid competitors, blank questions, unsupported dates, all six unique tasks, all three strategies, and their task weights.
+- [x] Run focused core/shared tests, full `bun run typecheck`, and `bun run test:unit`; commit and push `feat: define business research domain and catalog`.
 
 ### Task 3: Implement the deterministic decision loop and run event log
 
@@ -165,7 +165,7 @@ export interface BusinessResearchToolPort {
 - Create: `packages/ui/src/atoms/businessResearchAtoms.ts`, tests
 - Modify: `packages/ui/src/client.tsx`, `packages/ui/src/components/layout/AppShell.tsx`, `packages/ui/src/components/workspace/FinanceWorkspace.tsx`, `packages/ui/src/components/layout/WorkspaceTopbar.tsx`, both locale research/navigation dictionaries
 
-- [ ] Add enterprise input form for industry, question, 2–4 competitors, task and strategy; support fixture mode and explicit live-search key status.
+- [ ] Add enterprise input form for industry, question, 2–4 competitors and strategy; show dynamically selected task facets in the run timeline; support fixture mode and explicit live-search key status.
 - [ ] Show decision timeline, current action, evidence grade, source links, claim citations, conflict/unknown states, partial/failure/cancel states, saved reports and report diffs.
 - [ ] Add monitoring subscribe/pause/remove controls with next-check and last-check reason, and evaluation results showing numerator, denominator, sample count, p50/p95, and fixture/live label.
 - [ ] Follow existing client/atom/i18n patterns; add accessible keyboard controls and narrow-screen layout.

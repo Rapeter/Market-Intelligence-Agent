@@ -4,6 +4,7 @@ import type { SupportedLocale } from './locale.ts';
 import type { FinancialEvidenceEnvelope } from './financial-evidence.ts';
 
 export type { SupportedLocale, LocalePreference } from './locale.ts';
+export * from './business-research.ts';
 
 // Stream Event Protocol v1 (issue #27, docs/adr/0001-stream-event-protocol.md)
 export * from './stream-events.ts';
