@@ -56,6 +56,9 @@ class BusinessResearchPage {
     const beforeIds = new Set(before.map((run) => run.id));
     const startedAt = Date.now();
     await this.fixtureMode.click();
+    await this.page.waitForFunction(() => (
+      document.querySelector('[data-testid="business-research-mode-fixture"]')?.getAttribute('aria-pressed') === 'true'
+    ), null, { timeout: 5_000 });
     await this.startButton.click();
     const queuedRun = await waitForValue(
       () => this.api('listRuns'),
@@ -63,12 +66,27 @@ class BusinessResearchPage {
       30_000,
       'a newly persisted business research run',
     );
-    const run = await waitForValue(
-      () => this.api('getRun', { runId: queuedRun.id }),
-      (candidate) => candidate && ['completed', 'partial', 'failed', 'cancelled'].includes(candidate.state.status) && candidate.reportId ? candidate : false,
-      60_000,
-      `terminal state for ${queuedRun.id}`,
-    );
+    let run;
+    try {
+      run = await waitForValue(
+        () => this.api('getRun', { runId: queuedRun.id }),
+        (candidate) => candidate && ['completed', 'partial', 'failed', 'cancelled'].includes(candidate.state.status) && candidate.reportId ? candidate : false,
+        60_000,
+        `terminal state for ${queuedRun.id}`,
+      );
+    } catch (error) {
+      const [lastRun, events] = await Promise.all([
+        this.api('getRun', { runId: queuedRun.id }),
+        this.api('listEvents', { runId: queuedRun.id }),
+      ]);
+      const diagnostic = {
+        mode: lastRun?.mode,
+        status: lastRun?.state?.status,
+        reportId: lastRun?.reportId,
+        eventTypes: events.map((event) => event.type),
+      };
+      throw new Error(`${error.message} Last persisted run state: ${JSON.stringify(diagnostic)}`, { cause: error });
+    }
     assert.equal(run.mode, 'fixture', `Fixture mode was not persisted: ${JSON.stringify({ queuedRun, run })}`);
     assert.equal(run.state.status, 'completed');
     await this.report.getByText(/Fixture-only example/).waitFor({ state: 'visible', timeout: 15_000 });

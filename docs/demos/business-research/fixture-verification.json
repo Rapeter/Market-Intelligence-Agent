@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
   "verificationMode": "deterministic-fixture-only",
-  "generatedAt": "2026-09-24T07:23:29.382Z",
+  "generatedAt": "2026-09-24T08:24:56.750Z",
   "electronUi": {
     "fixtureRunCount": 2,
     "fixtureEvaluation": {
       "passed": 24,
       "total": 24
     },
-    "firstRunElapsedMs": 1503,
-    "secondRunElapsedMs": 1496,
+    "firstRunElapsedMs": 1499,
+    "secondRunElapsedMs": 1520,
     "evidenceRecordsPerRun": 2,
     "citationGrade": "fixture_data",
     "reloadPersistence": true,
@@ -31,9 +31,9 @@
     "checksPersisted": 3,
     "duplicateSuppressed": true,
     "elapsedMs": [
-      56,
-      38,
-      4
+      45,
+      32,
+      3
     ],
     "checks": [
       {
@@ -43,7 +43,7 @@
         "reason": "new_source",
         "runMode": "fixture",
         "runId": "run-monitor-check-1",
-        "elapsedMs": 56
+        "elapsedMs": 45
       },
       {
         "snapshotId": "northstar-update-v2",
@@ -52,14 +52,14 @@
         "reason": "source_updated",
         "runMode": "fixture",
         "runId": "run-monitor-check-2",
-        "elapsedMs": 38
+        "elapsedMs": 32
       },
       {
         "snapshotId": "northstar-update-v1",
         "expectedDecision": "not_triggered",
         "decision": "skip",
         "reason": "duplicate_signal",
-        "elapsedMs": 4
+        "elapsedMs": 3
       }
     ]
   },
