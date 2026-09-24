@@ -61,6 +61,7 @@ export function synthesizeBusinessResearchReport(input: unknown): BusinessResear
   if (generatedAt === undefined) issues.push({ path: 'generatedAt', code: 'invalid_timestamp' });
 
   const outcome = parseOutcome(input.outcome);
+  let reportOutcome = outcome;
   if (outcome === undefined) issues.push({ path: 'outcome', code: 'unsupported_outcome' });
 
   const persistedEvidence = parseEvidence(input.evidence);
@@ -131,7 +132,14 @@ export function synthesizeBusinessResearchReport(input: unknown): BusinessResear
   }
 
   if (outcome?.status === 'completed' && !claimHasEvidence && !claimValidationFailed) {
-    issues.push({ path: 'draft.claims', code: 'completed_without_supported_claim' });
+    if (claims.length > 0 && claims.every((claim) => claim.kind === 'unresolved')) {
+      reportOutcome = {
+        status: 'partial',
+        reason: 'No evidence-backed factual claims were available.',
+      };
+    } else {
+      issues.push({ path: 'draft.claims', code: 'completed_without_supported_claim' });
+    }
   }
 
   if (
@@ -147,8 +155,8 @@ export function synthesizeBusinessResearchReport(input: unknown): BusinessResear
       id,
       runId,
       generatedAt,
-      status: outcome.status,
-      ...(outcome.status === 'partial' ? { partialReason: outcome.reason } : {}),
+      status: reportOutcome!.status,
+      ...(reportOutcome!.status === 'partial' ? { partialReason: reportOutcome!.reason } : {}),
       title,
       claims,
       evidence: persistedEvidence.filter((item) => citedIds.has(item.id)),

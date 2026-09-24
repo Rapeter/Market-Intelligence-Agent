@@ -157,4 +157,30 @@ describe('synthesizeBusinessResearchReport', () => {
       report: { status: 'partial', claims: [{ kind: 'unresolved' }], evidence: [] },
     });
   });
+
+  it('downgrades an otherwise completed run to a partial report when all findings remain unresolved', () => {
+    const result = synthesizeBusinessResearchReport({
+      ...reportInput,
+      draft: {
+        title: 'Incomplete competitor comparison',
+        claims: [{
+          kind: 'unresolved',
+          id: unresolvedId,
+          question: 'How does the second competitor price this product?',
+          reason: 'No comparable public price source was found.',
+        }],
+        monitoringActions: ['Check for a comparable public disclosure next time.'],
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      report: {
+        status: 'partial',
+        partialReason: 'No evidence-backed factual claims were available.',
+        claims: [{ kind: 'unresolved' }],
+        evidence: [],
+      },
+    });
+  });
 });
