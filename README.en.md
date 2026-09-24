@@ -68,6 +68,16 @@ bun run --filter @finagent/electron test:e2e:business-research
 
 Live research additionally requires an available model provider and a Brave Search credential; credentials are stored securely by the Electron main process. Fixture samples are explicitly labeled illustrative and must not be treated as live findings.
 
+Real-model and public-search acceptance use a separate local profile. Do not put credentials in the repository, command arguments, or chat. Windows PowerShell example:
+
+```powershell
+$liveProfile = Join-Path $env:LOCALAPPDATA 'Market-Intelligence-Agent\live-e2e'
+bun run --filter @finagent/electron business-research:live-profile -- prepare "$liveProfile"
+bun run --filter @finagent/electron business-research:live-profile -- open "$liveProfile"
+```
+
+When the window opens, configure a model provider in Settings and Brave Search in the Market Intelligence workspace. Return to the terminal and press Enter to close the window after saving; this profile remains on the local machine for later acceptance runs. The script marks only an empty directory or one it has already marked, and refuses repository paths and unmarked non-empty directories.
+
 ## Project History and Contributions
 
 I co-developed Folio with helsome. This repository preserves Folio's commit history and prior contribution records. The business-research domain, dynamic decisions, public-information monitoring, evaluation cases, and demo materials for Market Intelligence Agent have been implemented here and continue to be verified. Folio's existing stock-screening tasks, investment strategies, and evaluation cases are not counted as new enterprise-research work in this project.

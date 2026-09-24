@@ -1,7 +1,7 @@
 import { createWriteStream } from 'node:fs';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 
 const require = createRequire(import.meta.url);
 
@@ -63,7 +63,28 @@ function tryResolve(packagePath) {
   }
 }
 
-export function spawnElectron({ appRoot, repoRoot, port, userDataDir, logPath, visible = false }) {
+export function buildElectronEnvironment(
+  { userDataDir, agentProvider = 'local', visible = false },
+  sourceEnv = process.env,
+) {
+  if (agentProvider !== 'local' && agentProvider !== 'pi-runtime') {
+    throw new Error('agentProvider must be local or pi-runtime.');
+  }
+  if (typeof userDataDir !== 'string' || !isAbsolute(userDataDir)) {
+    throw new Error('userDataDir must be an absolute path.');
+  }
+  return {
+    ...sourceEnv,
+    FINAGENT_AGENT_PROVIDER: agentProvider,
+    FINAGENT_FORCE_PROD_LOAD: '1',
+    FINAGENT_E2E: '1',
+    FINAGENT_E2E_HIDDEN: visible ? '0' : '1',
+    FINAGENT_E2E_VISIBLE: visible ? '1' : '0',
+    FINAGENT_USER_DATA_DIR: userDataDir,
+  };
+}
+
+export function spawnElectron({ appRoot, repoRoot, port, userDataDir, logPath, visible = false, agentProvider = 'local' }) {
   const electronBinary = resolveElectronBinary(appRoot, repoRoot);
   const electronMain = join(appRoot, 'src/main/index.js');
   const log = createWriteStream(logPath, { flags: 'w' });
@@ -77,15 +98,7 @@ export function spawnElectron({ appRoot, repoRoot, port, userDataDir, logPath, v
   const proc = require('node:child_process').spawn(electronBinary, args, {
     cwd: repoRoot,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: {
-      ...process.env,
-      FINAGENT_AGENT_PROVIDER: 'local',
-      FINAGENT_FORCE_PROD_LOAD: '1',
-      FINAGENT_E2E: '1',
-      FINAGENT_E2E_HIDDEN: visible ? '0' : '1',
-      FINAGENT_E2E_VISIBLE: visible ? '1' : '0',
-      FINAGENT_USER_DATA_DIR: userDataDir,
-    },
+    env: buildElectronEnvironment({ userDataDir, agentProvider, visible }),
   });
   proc.stdout.on('data', (chunk) => log.write(chunk));
   proc.stderr.on('data', (chunk) => log.write(chunk));

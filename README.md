@@ -68,6 +68,16 @@ bun run --filter @finagent/electron test:e2e:business-research
 
 实时研究还需要可用的模型提供方和 Brave Search 凭证；凭证由应用主进程安全保存。fixture 示例明确标为说明性数据，不能当作实时结论。
 
+真实模型与公开搜索验收使用独立的本地档案，不要把凭证写进仓库、命令参数或聊天。Windows PowerShell 示例：
+
+```powershell
+$liveProfile = Join-Path $env:LOCALAPPDATA 'Market-Intelligence-Agent\live-e2e'
+bun run --filter @finagent/electron business-research:live-profile -- prepare "$liveProfile"
+bun run --filter @finagent/electron business-research:live-profile -- open "$liveProfile"
+```
+
+应用窗口打开后，在设置中配置模型提供方，并在 Market Intelligence 工作区配置 Brave Search。保存后回到终端按 Enter 关闭窗口；此档案会保留在本机供后续验收使用。脚本只会标记空目录或自己已标记的目录，并拒绝仓库内路径和未标记的非空目录。
+
 ## 项目历史与贡献
 
 我与 helsome 共同开发了 Folio。本仓库保留 Folio 的提交历史和既有贡献记录；Market Intelligence Agent 的企业研究领域、动态决策、公开信息追踪、评测集与演示材料在此仓库中实现并持续验证。Folio 原有的股票筛选、投资策略和评测案例不计为本项目新增的企业研究成果。
