@@ -6,6 +6,7 @@ import {
   type BusinessResearchTaskInput,
 } from '@finagent/core';
 import type { BusinessResearchToolPort, DecisionModelPort } from './core.ts';
+import type { BusinessResearchEvent } from './events.ts';
 import { runBusinessResearch } from './runtime.ts';
 
 const INITIAL_QUERY = 'EV range official specifications 2025';
@@ -106,6 +107,41 @@ async function runEvidenceScenario(conflicting: boolean) {
 }
 
 describe('runBusinessResearch', () => {
+  it('awaits event persistence before asking the model for the next action', async () => {
+    const persisted: BusinessResearchEvent[] = [];
+    let modelObservedPersistedPlanning = false;
+    const options = {
+      runId: id('run', 'run-event-persistence'),
+      task: taskInput(),
+      decisionModel: {
+        async decide() {
+          modelObservedPersistedPlanning = persisted.some(
+            (event) => event.type === 'phase_changed' && event.status === 'planning',
+          );
+          return { kind: 'finish' as const, rationale: 'No evidence is available in this persistence test.' };
+        },
+      },
+      tools: {
+        async searchWeb() { return []; },
+        async openSource(evidenceId: BusinessResearchEvidence['id']) {
+          return { ...evidence('unused', 'Unused page.', 'unused'), id: evidenceId, grade: 'page_text' as const };
+        },
+      },
+      signal: new AbortController().signal,
+      async onEvent(event: BusinessResearchEvent) {
+        await Promise.resolve();
+        persisted.push(structuredClone(event));
+      },
+    };
+
+    const result = await runBusinessResearch(
+      options as Parameters<typeof runBusinessResearch>[0] & { onEvent: (event: BusinessResearchEvent) => Promise<void> },
+    );
+
+    expect(modelObservedPersistedPlanning).toBe(true);
+    expect(persisted).toEqual(result.events);
+  });
+
   it('changes the next query after conflicting evidence and finishes when independent evidence agrees', async () => {
     const conflict = await runEvidenceScenario(true);
     const agreement = await runEvidenceScenario(false);

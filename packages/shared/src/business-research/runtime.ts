@@ -13,7 +13,11 @@ import {
 } from '@finagent/core';
 import { BUSINESS_RESEARCH_CATALOG } from './catalog.ts';
 import { parseBusinessResearchAction, type BusinessResearchToolPort, type DecisionModelPort } from './core.ts';
-import { createBusinessResearchEventLog, type BusinessResearchEvent } from './events.ts';
+import {
+  createBusinessResearchEventLog,
+  type BusinessResearchEvent,
+  type BusinessResearchEventDraft,
+} from './events.ts';
 
 export interface BusinessResearchRuntimeLimits {
   maxIterations: number;
@@ -31,6 +35,7 @@ export interface RunBusinessResearchOptions {
   signal: AbortSignal;
   limits?: Partial<BusinessResearchRuntimeLimits>;
   now?: () => number;
+  onEvent?: (event: BusinessResearchEvent) => void | Promise<void>;
 }
 
 export interface BusinessResearchRuntimeResult {
@@ -84,16 +89,26 @@ export async function runBusinessResearch(
     updatedAt: isoTime(startedAt),
   };
 
-  eventLog.append({ type: 'run_started', task: options.task });
+  const appendEvent = async (draft: BusinessResearchEventDraft): Promise<void> => {
+    const event = eventLog.append(draft);
+    try {
+      await options.onEvent?.(event);
+    } catch (error) {
+      cleanupRun();
+      throw error;
+    }
+  };
 
-  const complete = (outcome: BusinessResearchTerminalOutcome): BusinessResearchRuntimeResult => {
+  await appendEvent({ type: 'run_started', task: options.task });
+
+  const complete = async (outcome: BusinessResearchTerminalOutcome): Promise<BusinessResearchRuntimeResult> => {
     cleanupRun();
     const completedAt = isoTime(now());
     if (outcome.status === 'completed') state = { status: 'completed', completedAt };
     else if (outcome.status === 'partial') state = { status: 'partial', completedAt, reason: outcome.reason };
     else if (outcome.status === 'failed') state = { status: 'failed', completedAt, code: outcome.code };
     else state = { status: 'cancelled', completedAt, reason: outcome.reason };
-    eventLog.append({ type: 'run_terminal', outcome });
+    await appendEvent({ type: 'run_terminal', outcome });
     return {
       state,
       outcome,
@@ -104,7 +119,7 @@ export async function runBusinessResearch(
     };
   };
 
-  const stopForLimit = (code: string, reason: string): BusinessResearchRuntimeResult =>
+  const stopForLimit = async (code: string, reason: string): Promise<BusinessResearchRuntimeResult> =>
     evidenceById.size > 0
       ? complete({ status: 'partial', reason })
       : complete({ status: 'failed', code });
@@ -138,7 +153,7 @@ export async function runBusinessResearch(
     }
 
     state = { status: 'planning', updatedAt: isoTime(now()) };
-    eventLog.append({ type: 'phase_changed', status: 'planning' });
+    await appendEvent({ type: 'phase_changed', status: 'planning' });
 
     let proposal: unknown;
     try {
@@ -162,17 +177,17 @@ export async function runBusinessResearch(
       previousActions: actions,
     });
     if (!validation.ok) {
-      eventLog.append({ type: 'decision_rejected', code: validation.code });
+      await appendEvent({ type: 'decision_rejected', code: validation.code });
       return complete({ status: 'failed', code: `INVALID_DECISION_${validation.code.toUpperCase()}` });
     }
 
     const action = validation.action;
     actions.push(action);
-    eventLog.append({ type: 'decision_made', action });
+    await appendEvent({ type: 'decision_made', action });
 
     if (action.kind === 'finish') {
       state = { status: 'synthesizing', updatedAt: isoTime(now()) };
-      eventLog.append({ type: 'phase_changed', status: 'synthesizing' });
+      await appendEvent({ type: 'phase_changed', status: 'synthesizing' });
       return evidenceById.size > 0
         ? complete({ status: 'completed' })
         : complete({ status: 'partial', reason: 'The agent finished without collecting any evidence.' });
@@ -188,11 +203,11 @@ export async function runBusinessResearch(
     if (action.kind === 'search_web') searchActions += 1;
     else openActions += 1;
     state = { status: 'gathering', updatedAt: isoTime(now()) };
-    eventLog.append({
+    await appendEvent({
       type: 'phase_changed',
       status: 'gathering',
     });
-    eventLog.append({
+    await appendEvent({
       type: 'tool_started',
       actionKind: action.kind,
       ...(action.kind === 'open_source' ? { evidenceId: action.evidenceId } : {}),
@@ -215,7 +230,7 @@ export async function runBusinessResearch(
         code: safeErrorCode(error),
       };
       observations.push(observation);
-      eventLog.append({ type: 'observation_recorded', observation });
+      await appendEvent({ type: 'observation_recorded', observation });
       noProgressSteps += 1;
       if (noProgressSteps >= limits.maxNoProgressSteps) {
         return stopForLimit('NO_PROGRESS', 'Repeated tool failures made no research progress.');
@@ -233,7 +248,7 @@ export async function runBusinessResearch(
         code: 'INVALID_EVIDENCE',
       };
       observations.push(observation);
-      eventLog.append({ type: 'observation_recorded', observation });
+      await appendEvent({ type: 'observation_recorded', observation });
       noProgressSteps += 1;
       if (noProgressSteps >= limits.maxNoProgressSteps) {
         return stopForLimit('NO_PROGRESS', 'Repeated invalid tool results made no research progress.');
@@ -255,7 +270,7 @@ export async function runBusinessResearch(
         ? { kind: 'search_results', query: action.query, evidence: normalized.evidence }
         : { kind: 'source_opened', evidence: normalized.evidence[0]! };
     observations.push(observation);
-    eventLog.append({ type: 'observation_recorded', observation });
+    await appendEvent({ type: 'observation_recorded', observation });
     if (noProgressSteps >= limits.maxNoProgressSteps) {
       return stopForLimit('NO_PROGRESS', 'Repeated observations added no new evidence.');
     }

@@ -32,7 +32,7 @@ export type BusinessResearchMonitorSignalDecision =
     }
   | {
       kind: 'skip';
-      reason: 'invalid_input' | 'check_failed' | 'unrelated' | 'no_change' | 'duplicate_signal';
+      reason: 'invalid_input' | 'check_failed' | 'unrelated' | 'no_change' | 'duplicate_signal' | 'subscription_disabled';
     };
 
 const MAX_SNAPSHOTS = 100;
