@@ -20,6 +20,7 @@ import { DiscoverView } from '../discover/DiscoverView';
 import { EvaluationCenter } from '../evaluation/EvaluationCenter';
 import { EventsView } from '../events/EventsView';
 import { ProfileSecurityView } from '../profile/ProfileSecurityView';
+import { BusinessResearchWorkspace } from '../businessResearch/BusinessResearchWorkspace';
 import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 const WORKSPACE_TABS: { value: WorkspaceView; label: string }[] = [
   { value: 'overview', label: 'Overview' },
@@ -61,6 +62,9 @@ export const FinanceWorkspace: React.FC = () => {
       break;
     case 'research':
       content = <ResearchPanel />;
+      break;
+    case 'businessResearch':
+      content = <BusinessResearchWorkspace />;
       break;
     case 'thesis':
       content = <ThesisPanel />;

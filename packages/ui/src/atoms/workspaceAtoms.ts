@@ -41,6 +41,8 @@ export type NavSection =
   | 'evaluation'
   // Stitch portfolio surfaces: upcoming events and local profile/security.
   | 'events'
+  // Independent public-information enterprise research workspace.
+  | 'businessResearch'
   | 'profile';
 
 export const navSectionAtom = persistedAtom<NavSection>('navSection', 'sessions');

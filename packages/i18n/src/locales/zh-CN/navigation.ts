@@ -10,6 +10,7 @@ export const navigation = {
   compare: '对比',
   alerts: '提醒',
   research: '研究',
+  businessResearch: '企业经营研究',
   thesis: '投资逻辑',
   skills: '技能',
   evaluation: '评测',

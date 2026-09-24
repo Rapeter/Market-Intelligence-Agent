@@ -7,6 +7,7 @@ export const navigation = {
   compare: 'Compare',
   alerts: 'Alerts',
   research: 'Research',
+  businessResearch: 'Market Intelligence',
   thesis: 'Thesis',
   skills: 'Skills',
   evaluation: 'Evaluation',

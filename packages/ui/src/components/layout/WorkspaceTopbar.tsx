@@ -19,7 +19,7 @@ export const WorkspaceTopbar: React.FC = () => {
   const activeSymbol = useAtomValue(activeSymbolAtom);
   const navSection = useAtomValue(navSectionAtom);
   const [activeView, setActiveView] = useAtom(activeViewAtom);
-  const showAssetTabs = navSection !== 'today' && navSection !== 'alerts' && navSection !== 'events' && navSection !== 'profile' && navSection !== 'settings';
+  const showAssetTabs = navSection !== 'today' && navSection !== 'alerts' && navSection !== 'events' && navSection !== 'profile' && navSection !== 'settings' && navSection !== 'businessResearch';
 
   const selectTab = (view: WorkspaceView) => {
     setActiveView(view);
@@ -28,7 +28,7 @@ export const WorkspaceTopbar: React.FC = () => {
   return (
     <header className="folio-workspace-topbar flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-surface px-6">
       <div className="flex min-w-0 items-center gap-7">
-        <div className="folio-workspace-topbar-title shrink-0">Folio Research</div>
+        <div className="folio-workspace-topbar-title shrink-0">{navSection === 'businessResearch' ? t('navigation.businessResearch') : 'Folio Research'}</div>
         {showAssetTabs && (
           <nav aria-label={t('navigation.workspaceTabs')} className="folio-workspace-topbar-tabs flex h-full items-center gap-5">
             {TABS.map((tab) => (
