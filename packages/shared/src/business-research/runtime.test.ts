@@ -7,6 +7,7 @@ import {
 } from '@finagent/core';
 import type { BusinessResearchToolPort, DecisionModelPort } from './core.ts';
 import type { BusinessResearchEvent } from './events.ts';
+import { createBusinessResearchFixtureTools } from './fixture.ts';
 import { runBusinessResearch } from './runtime.ts';
 
 const INITIAL_QUERY = 'EV range official specifications 2025';
@@ -154,6 +155,48 @@ describe('runBusinessResearch', () => {
     expect(conflict.result.events.map(({ sequence }) => sequence)).toEqual(
       conflict.result.events.map((_, index) => index + 1),
     );
+  });
+
+  it('accepts fixture-grade search and opened evidence only in fixture mode', async () => {
+    const fixtureRunId = id('run', 'run-fixture-evidence');
+    const fixtureTools = createBusinessResearchFixtureTools(fixtureRunId, taskInput());
+    const fixtureResult = await runBusinessResearch({
+      runId: fixtureRunId,
+      task: taskInput(),
+      mode: 'fixture',
+      decisionModel: {
+        async decide({ observations }) {
+          const latest = observations.at(-1);
+          if (!latest) return { kind: 'search_web', query: 'fixture product evidence', taskId: 'competitor_products' };
+          if (latest.kind === 'search_results') return { kind: 'open_source', evidenceId: latest.evidence[0]!.id };
+          return { kind: 'finish', rationale: 'The fixture source was opened for the mode validation test.' };
+        },
+      },
+      tools: fixtureTools,
+      signal: new AbortController().signal,
+    });
+
+    expect(fixtureResult.state.status).toBe('completed');
+    expect(fixtureResult.evidence).toHaveLength(1);
+    expect(fixtureResult.evidence[0]).toMatchObject({ sourceKind: 'fixture', grade: 'fixture_data' });
+
+    const liveModeResult = await runBusinessResearch({
+      runId: id('run', 'run-live-rejects-fixture-evidence'),
+      task: taskInput(),
+      mode: 'live',
+      decisionModel: {
+        async decide({ observations }) {
+          return observations.some((item) => item.kind === 'tool_failure')
+            ? { kind: 'finish', rationale: 'The fixture source must not enter a live run.' }
+            : { kind: 'search_web', query: 'fixture product evidence', taskId: 'competitor_products' };
+        },
+      },
+      tools: fixtureTools,
+      signal: new AbortController().signal,
+    });
+    expect(liveModeResult.state.status).toBe('partial');
+    expect(liveModeResult.evidence).toHaveLength(0);
+    expect(liveModeResult.observations).toContainEqual(expect.objectContaining({ kind: 'tool_failure', code: 'INVALID_EVIDENCE' }));
   });
 
   it('stops at the search budget and preserves a partial result', async () => {

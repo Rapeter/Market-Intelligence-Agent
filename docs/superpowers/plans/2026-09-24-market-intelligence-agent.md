@@ -177,11 +177,13 @@ export interface BusinessResearchToolPort {
 - Create: `apps/electron/e2e/business-research.mjs`, test fixtures, `docs/demos/business-research/`
 - Modify: `apps/electron/package.json` E2E scripts, `README.md`, `README.en.md`
 
-- [ ] Add E2E flows for fixture research, citations, reload persistence, manual rerun diff, monitor subscribe/pause, duplicate suppression, and automatic trigger after a material new fixture snapshot.
+- [x] Add E2E flows for fixture research, citations, reload persistence, manual rerun diff, monitor subscribe/pause, duplicate suppression, and automatic trigger after a material new fixture snapshot.
 - [ ] Run the app with the configured real model and public search adapter. Capture two same-topic counterfactual runs where different evidence causes different valid next tool decisions; save redacted traces and actual elapsed times.
 - [ ] Run one live subscription check that discovers new public information and triggers a research run; redact keys and any personal data from artifacts.
-- [ ] Capture current UI screenshots; update setup, feature boundaries, 6/3/24 target counts, evaluation results, attribution, and remaining limitations based only on observed results.
-- [ ] Run focused E2E and README consistency checks; commit and push `test: verify dynamic research and public change triggers`.
+- [x] Capture current UI screenshots; update setup, feature boundaries, 6/3/24 counts, fixture evaluation results, attribution, and remaining limitations based only on observed results.
+- [x] Run focused E2E and README consistency checks; commit and push `test: verify dynamic research and public change triggers`.
+
+Task 9 fixture segment: the Electron flow persisted two fixture runs and verified citations, reload, rerun diff, monitor pause, and 24/24 deterministic cases; the monitor integration persisted two fixture follow-up runs, suppressed a duplicate signal, and issued zero network requests. The real-model counterfactual and live public-source trigger checks remain open until a dedicated profile has model and Brave credentials configured; fixture evidence is not a substitute.
 
 ### Task 10: Release audit and publish all verified commits
 

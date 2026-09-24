@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "verificationMode": "deterministic-fixture-only",
+  "generatedAt": "2026-09-24T06:34:15.885Z",
+  "electronUi": {
+    "fixtureRunCount": 2,
+    "fixtureEvaluation": {
+      "passed": 24,
+      "total": 24
+    },
+    "firstRunElapsedMs": 1511,
+    "secondRunElapsedMs": 1491,
+    "evidenceRecordsPerRun": 2,
+    "citationGrade": "fixture_data",
+    "reloadPersistence": true,
+    "rerunDiffNewEvidence": 2,
+    "subscriptionCreated": true,
+    "pausePersistedAfterReload": true
+  },
+  "monitorIntegration": {
+    "schemaVersion": 1,
+    "verificationMode": "deterministic-fixture-only",
+    "fixtureFiles": [
+      "monitor-v1.json",
+      "monitor-v2.json"
+    ],
+    "snapshotSource": "apps/electron/e2e/fixtures/business-research",
+    "networkRequests": 0,
+    "probeCalls": 3,
+    "researchRunsPersisted": 2,
+    "checksPersisted": 3,
+    "duplicateSuppressed": true,
+    "elapsedMs": [
+      52,
+      38,
+      4
+    ],
+    "checks": [
+      {
+        "snapshotId": "northstar-update-v1",
+        "expectedDecision": "triggered",
+        "decision": "trigger",
+        "reason": "new_source",
+        "runMode": "fixture",
+        "runId": "run-monitor-check-1",
+        "elapsedMs": 52
+      },
+      {
+        "snapshotId": "northstar-update-v2",
+        "expectedDecision": "triggered",
+        "decision": "trigger",
+        "reason": "source_updated",
+        "runMode": "fixture",
+        "runId": "run-monitor-check-2",
+        "elapsedMs": 38
+      },
+      {
+        "snapshotId": "northstar-update-v1",
+        "expectedDecision": "not_triggered",
+        "decision": "skip",
+        "reason": "duplicate_signal",
+        "elapsedMs": 4
+      }
+    ]
+  },
+  "liveModelCounterfactuals": "not verified by this fixture-only run",
+  "livePublicChangeTrigger": "not verified by this fixture-only run"
+}

@@ -7,6 +7,7 @@ import {
   type BusinessResearchEvidenceId,
   type BusinessResearchObservation,
   type BusinessResearchRunId,
+  type BusinessResearchRunMode,
   type BusinessResearchRunState,
   type BusinessResearchTaskInput,
   type BusinessResearchTerminalOutcome,
@@ -18,6 +19,7 @@ import {
   type BusinessResearchEvent,
   type BusinessResearchEventDraft,
 } from './events.ts';
+import { isValidBusinessResearchEvidenceUrl } from './evidence.ts';
 
 export interface BusinessResearchRuntimeLimits {
   maxIterations: number;
@@ -30,6 +32,7 @@ export interface BusinessResearchRuntimeLimits {
 export interface RunBusinessResearchOptions {
   runId: BusinessResearchRunId;
   task: BusinessResearchTaskInput;
+  mode?: BusinessResearchRunMode;
   decisionModel: DecisionModelPort;
   tools: BusinessResearchToolPort;
   signal: AbortSignal;
@@ -240,7 +243,7 @@ export async function runBusinessResearch(
     if (timedOut) return stopForLimit('TIME_BUDGET_EXHAUSTED', 'Total run time budget exhausted.');
     if (runSignal.aborted) return complete({ status: 'cancelled' });
 
-    const normalized = normalizeReturnedEvidence(returnedEvidence, action);
+    const normalized = normalizeReturnedEvidence(returnedEvidence, action, options.mode ?? 'live');
     if (!normalized.ok) {
       const observation: BusinessResearchObservation = {
         kind: 'tool_failure',
@@ -286,6 +289,7 @@ function validLimits(limits: BusinessResearchRuntimeLimits): boolean {
 function normalizeReturnedEvidence(
   values: unknown,
   action: Extract<BusinessResearchAction, { kind: 'search_web' | 'open_source' }>,
+  mode: BusinessResearchRunMode,
 ): { ok: true; evidence: BusinessResearchEvidence[] } | { ok: false } {
   if (!Array.isArray(values)) return { ok: false };
   const evidence: BusinessResearchEvidence[] = [];
@@ -301,7 +305,7 @@ function normalizeReturnedEvidence(
       value.title.trim().length === 0 ||
       value.title.length > 500 ||
       typeof value.url !== 'string' ||
-      !isPublicHttpsUrl(value.url) ||
+      !isValidBusinessResearchEvidenceUrl(value.url, value.sourceKind, value.grade) ||
       !isBusinessResearchSourceKind(value.sourceKind) ||
       !isBusinessResearchEvidenceGrade(value.grade) ||
       typeof value.query !== 'string' ||
@@ -313,10 +317,10 @@ function normalizeReturnedEvidence(
     ) {
       return { ok: false };
     }
-    if (action.kind === 'open_source' && (id !== action.evidenceId || value.grade !== 'page_text')) {
-      return { ok: false };
-    }
-    if (action.kind === 'search_web' && value.grade !== 'search_excerpt') return { ok: false };
+    const fixtureMode = mode === 'fixture';
+    const expectedGrade = fixtureMode ? 'fixture_data' : action.kind === 'open_source' ? 'page_text' : 'search_excerpt';
+    if ((value.sourceKind === 'fixture') !== fixtureMode || value.grade !== expectedGrade) return { ok: false };
+    if (action.kind === 'open_source' && id !== action.evidenceId) return { ok: false };
     if (seen.has(id)) continue;
     seen.add(id);
     evidence.push({
@@ -333,15 +337,6 @@ function normalizeReturnedEvidence(
   }
   if (action.kind === 'open_source' && evidence.length !== 1) return { ok: false };
   return { ok: true, evidence };
-}
-
-function isPublicHttpsUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' && url.username.length === 0 && url.password.length === 0;
-  } catch {
-    return false;
-  }
 }
 
 function evidenceChanged(previous: BusinessResearchEvidence, next: BusinessResearchEvidence): boolean {

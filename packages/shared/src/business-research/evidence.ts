@@ -36,6 +36,25 @@ export function canonicalizeEvidenceUrl(value: unknown): string | undefined {
   }
 }
 
+/** Validates factual evidence URLs normally and permits only reserved .invalid URLs for fixtures. */
+export function isValidBusinessResearchEvidenceUrl(
+  value: unknown,
+  sourceKind: unknown,
+  grade: unknown,
+): value is string {
+  if (sourceKind !== 'fixture' || grade !== 'fixture_data') {
+    return canonicalizeEvidenceUrl(value) !== undefined;
+  }
+  if (typeof value !== 'string' || value.length > 4_096) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.username.length === 0 && url.password.length === 0 &&
+      (url.port.length === 0 || url.port === '443') && url.hostname.toLowerCase().endsWith('.invalid');
+  } catch {
+    return false;
+  }
+}
+
 /** Converts markup and HTML entities into bounded, inert text for evidence display and prompts. */
 export function cleanEvidenceText(value: unknown, maxLength = 4_000): string {
   if (typeof value !== 'string' || !Number.isInteger(maxLength) || maxLength <= 0) return '';

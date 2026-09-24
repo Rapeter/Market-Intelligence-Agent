@@ -116,6 +116,34 @@ describe('synthesizeBusinessResearchReport', () => {
     });
   });
 
+  it('accepts explicitly labeled fixture evidence under the reserved .invalid domain', () => {
+    const fixtureEvidence: BusinessResearchEvidence = {
+      ...evidence[0]!,
+      id: parseBusinessResearchId('evidence', 'evidence-synthesis-fixture')!,
+      sourceId: parseBusinessResearchId('source', 'source-synthesis-fixture')!,
+      title: 'Illustrative fixture record',
+      url: 'https://example.invalid/business-research/fixture/1',
+      sourceKind: 'fixture',
+      grade: 'fixture_data',
+      excerpt: 'Fictional example only; this is not a verified market fact.',
+    };
+    const result = synthesizeBusinessResearchReport({
+      ...reportInput,
+      outcome: { status: 'partial', reason: 'Fixture records cannot establish real market facts.' },
+      evidence: [fixtureEvidence],
+      draft: {
+        title: 'Fixture-only example',
+        claims: [
+          { kind: 'supported', id: claimId, statement: 'A fixture record was attached; it does not establish a market fact.', evidenceIds: [fixtureEvidence.id] },
+          { kind: 'unresolved', id: unresolvedId, question: 'What changed?', reason: 'Fixture data is not public evidence.' },
+        ],
+        monitoringActions: [],
+      },
+    });
+
+    expect(result).toMatchObject({ ok: true, report: { status: 'partial', evidence: [fixtureEvidence] } });
+  });
+
   it('rejects citations not permitted by the evaluation case annotation', async () => {
     const result = synthesizeBusinessResearchReport({
       ...reportInput,

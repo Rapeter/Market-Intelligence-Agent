@@ -22,7 +22,7 @@ import {
 } from '@finagent/core';
 import { createCodeError } from '../agent/errors.ts';
 import type { JsonFileStore } from '../storage/json-file-store.ts';
-import { canonicalizeEvidenceUrl, cleanEvidenceText } from './evidence.ts';
+import { canonicalizeEvidenceUrl, cleanEvidenceText, isValidBusinessResearchEvidenceUrl } from './evidence.ts';
 import { replayBusinessResearchEvents, type BusinessResearchReplayResult } from './replay.ts';
 import type { BusinessResearchEvent } from './events.ts';
 import type {
@@ -585,7 +585,7 @@ function isEvidence(value: unknown): value is BusinessResearchEvidence {
   return parseBusinessResearchId('evidence', value.id) !== undefined &&
     parseBusinessResearchId('source', value.sourceId) !== undefined &&
     typeof value.title === 'string' && cleanEvidenceText(value.title, 500).length > 0 &&
-    typeof value.url === 'string' && canonicalizeEvidenceUrl(value.url) !== undefined &&
+    isValidBusinessResearchEvidenceUrl(value.url, value.sourceKind, value.grade) &&
     isBusinessResearchSourceKind(value.sourceKind) && isBusinessResearchEvidenceGrade(value.grade) && fixtureGradeMatchesSource &&
     typeof value.query === 'string' && cleanEvidenceText(value.query, 500).length > 0 &&
     typeof value.excerpt === 'string' && cleanEvidenceText(value.excerpt, 4_000).length > 0 && isIsoTime(value.retrievedAt);

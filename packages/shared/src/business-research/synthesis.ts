@@ -9,7 +9,7 @@ import {
   type BusinessResearchReportId,
   type BusinessResearchRunId,
 } from '@finagent/core';
-import { canonicalizeEvidenceUrl, cleanEvidenceText } from './evidence.ts';
+import { cleanEvidenceText, isValidBusinessResearchEvidenceUrl } from './evidence.ts';
 
 export interface BusinessResearchReport {
   id: BusinessResearchReportId;
@@ -180,7 +180,7 @@ function parseEvidence(value: unknown): BusinessResearchEvidence[] | undefined {
     if (!isRecord(item)) return undefined;
     const id = parseBusinessResearchId('evidence', item.id);
     const sourceId = parseBusinessResearchId('source', item.sourceId);
-    const url = canonicalizeEvidenceUrl(item.url);
+    const url = isValidBusinessResearchEvidenceUrl(item.url, item.sourceKind, item.grade) ? item.url : undefined;
     const title = cleanEvidenceText(item.title, 500);
     const query = cleanEvidenceText(item.query, 500);
     const excerpt = cleanEvidenceText(item.excerpt, 4_000);

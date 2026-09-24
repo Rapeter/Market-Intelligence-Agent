@@ -1,18 +1,43 @@
 # Market Intelligence Agent
 
-A desktop research workspace for business, strategy, and product teams. The goal is for an agent to use public information and observed evidence to choose its next research step, then produce competitor and industry reports with sources, conflicts, and gaps. While the app is running, it can track new public information for saved topics.
+A desktop research workspace for business, strategy, and product teams. The agent uses public information and observed evidence to choose its next research step, then produces competitor and industry reports with sources, conflicts, and gaps. While the app is running, it can track new public information for saved topics.
 
-> This project is under active development. Its desktop and agent foundation comes from the jointly developed Folio codebase. This repository is adding a separate business-research workflow. The planned capabilities below are design targets, not shipped features.
+> This is an alpha release. The business-research workflow and desktop UI are implemented; this page reports deterministic-fixture acceptance separately from real-model/public-search verification. The desktop and agent foundation comes from Folio, co-developed with helsome; its history and contribution records are preserved.
 
-## Planned Capabilities
+## Research Workflow
 
-- Public-information research across industry structure, competitor products, public pricing and channels, public customer-feedback signals, policy and technology risks, and evidence conflicts.
-- Dynamic agent decisions: choose another public search, open a discovered source, or finish based on current evidence, with replayable run records.
-- Evidence-backed reports that distinguish search snippets from inspected page text and retain sources, counter-evidence, and open questions.
-- New-information monitoring while the app is running. A material update triggers a new research run and report comparison; background monitoring while the app is closed is not included in the first version.
-- Evaluation targets: six enterprise research tasks, three strategies, and 24 executable cases. Actual passing results will be reported only after implementation and execution.
+- Six research tasks: industry landscape, competitor products, pricing and channels, public feedback, policy and technology risks, and evidence-change review.
+- Three strategies: industry overview, competitor deep dive, and change/risk tracking. Strategies change task priorities and search budgets; each agent step can only search public information, open a source discovered in the current run, or finish.
+- Reports distinguish search snippets from inspected page text and retain citations, conflicts, unresolved questions, and evidence grades. A search snippet is never labeled as inspected page text.
+- Subscriptions check on an interval while the app is running. A new source or material change to a known source can trigger follow-up research and a report comparison. Background monitoring while the app is closed is not included; on restart, at most one overdue check is caught up.
 
-The system uses publicly accessible information only. Extracted dates, products, and public prices retain their source URL and text excerpt. Public comments are potentially biased feedback signals, not representative customer research. The first version does not connect to private enterprise systems or a separate enterprise-data service.
+The system uses publicly accessible information only. Extracted dates, products, and public prices retain their source URL and text excerpt. Public comments are potentially biased feedback signals, not representative customer research. This version does not connect to private enterprise systems, customer-research systems, or an independent structured enterprise-data service.
+
+## Acceptance Results
+
+The following results come from deterministic local fixtures. They are not live-model accuracy or market findings.
+
+| Metric | Result | Counting rule |
+| --- | --- | --- |
+| Research tasks / strategies | 6 / 3 | Unique task and strategy IDs in the project catalog |
+| Executable evaluation cases | 24/24 passed; 0 failed, 0 excluded | Fixed scripted decisions and snapshots covering research runs, report/citation safety, recovery, and automatic triggers; not an estimate of real-model generalization |
+| Desktop research flow | 2 persisted runs, each with 2 fixture evidence records | Click-to-terminal-report-visible: 1,511 ms and 1,491 ms in this sample; local fixture timings, not an SLA |
+| Monitor integration | 3 checks; new-source and changed-source signals triggered 2 follow-up runs; duplicate signal suppressed | Two fixed snapshots; 0 network requests; check timings 52 ms, 38 ms, and 4 ms in this sample, not real-site latency |
+| Reload and report diff | Passed | Run, report, events, and paused state remained available after reload; the second same-topic run showed 2 new evidence records |
+
+The numerator, denominator, and acceptance threshold for task completion, tool selection, citation validity/factual coverage, conflict detection, recovery, and trigger precision/recall are defined individually in [Evaluation Metrics and Counting Rules](docs/superpowers/specs/2026-09-23-market-intelligence-agent-design.md#评测指标统计口径与通过条件). A zero denominator is not applicable; sample counts must not be omitted in favor of percentages alone. Latencies are in milliseconds. Evaluation p50 is the arithmetic median; p95 uses nearest rank (the sorted sample at `ceil(0.95 × N)`). The two UI fixture timings are reported as raw observations, not a performance promise.
+
+Real-model same-topic counterfactual decisions (different evidence producing a different next tool choice) and change-triggering from a real public search source have not yet passed acceptance. They require configured model and Brave Search credentials and must be run separately; fixture results do not substitute for them.
+
+Acceptance screenshots:
+
+![First fixture report: illustrative evidence is labeled and open questions remain unresolved](docs/demos/business-research/fixture-first-report.png)
+
+![Same-topic rerun shows newly observed evidence](docs/demos/business-research/fixture-rerun-diff.png)
+
+![Paused monitor subscription remains paused after app reload](docs/demos/business-research/fixture-monitor-paused.png)
+
+[Machine-readable fixture verification record](docs/demos/business-research/fixture-verification.json).
 
 ## Architecture
 
@@ -35,12 +60,18 @@ bun install
 bun run dev
 ```
 
-Setup, API-key configuration, and demo steps will be documented alongside the runnable research workflow. Live search requires a public-search API credential; sample material must never be presented as live findings.
+Run the research-flow acceptance test without external network access or API credentials:
+
+```bash
+bun run --filter @finagent/electron test:e2e:business-research
+```
+
+Live research additionally requires an available model provider and a Brave Search credential; credentials are stored securely by the Electron main process. Fixture samples are explicitly labeled illustrative and must not be treated as live findings.
 
 ## Project History and Contributions
 
-I co-developed Folio with helsome. This repository preserves Folio's commit history and prior contribution records. The business-research domain, dynamic decisions, public-information monitoring, evaluation cases, and demo materials for Market Intelligence Agent are being implemented here. Folio's existing stock-screening tasks, investment strategies, and evaluation cases are not counted as new enterprise-research work in this project.
+I co-developed Folio with helsome. This repository preserves Folio's commit history and prior contribution records. The business-research domain, dynamic decisions, public-information monitoring, evaluation cases, and demo materials for Market Intelligence Agent have been implemented here and continue to be verified. Folio's existing stock-screening tasks, investment strategies, and evaluation cases are not counted as new enterprise-research work in this project.
 
 ## Status
 
-The latest Folio main branch has been synchronized, and the product design and implementation plan are in place. Business-research code and runtime verification are still in progress. Feature claims, evaluation counts, and live-run results will match the final commits and their verification records.
+Current acceptance boundary: fixture research, persistence, report diff, monitor trigger/deduplication, and UI reload have passed. Real-model counterfactual decisions and real public-source monitoring still need live verification after credentials are configured. The 6/3/24 counts belong to this enterprise-research catalog and corpus; they do not reuse Folio investment research's 17/8/86 or claim those counts are equivalent.

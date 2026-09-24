@@ -220,6 +220,7 @@ export class BusinessResearchService {
       const runtimeResult = await runBusinessResearch({
         runId: record.id,
         task: record.task,
+        mode: record.mode ?? 'live',
         decisionModel: this.options.createDecisionModel(record.id, record.task, record.mode ?? 'live'),
         tools: this.options.createTools(record.id, record.task, record.mode ?? 'live'),
         signal,

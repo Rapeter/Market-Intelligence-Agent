@@ -63,7 +63,7 @@ function tryResolve(packagePath) {
   }
 }
 
-export function spawnElectron({ appRoot, repoRoot, port, userDataDir, logPath }) {
+export function spawnElectron({ appRoot, repoRoot, port, userDataDir, logPath, visible = false }) {
   const electronBinary = resolveElectronBinary(appRoot, repoRoot);
   const electronMain = join(appRoot, 'src/main/index.js');
   const log = createWriteStream(logPath, { flags: 'w' });
@@ -82,7 +82,8 @@ export function spawnElectron({ appRoot, repoRoot, port, userDataDir, logPath })
       FINAGENT_AGENT_PROVIDER: 'local',
       FINAGENT_FORCE_PROD_LOAD: '1',
       FINAGENT_E2E: '1',
-      FINAGENT_E2E_HIDDEN: '1',
+      FINAGENT_E2E_HIDDEN: visible ? '0' : '1',
+      FINAGENT_E2E_VISIBLE: visible ? '1' : '0',
       FINAGENT_USER_DATA_DIR: userDataDir,
     },
   });

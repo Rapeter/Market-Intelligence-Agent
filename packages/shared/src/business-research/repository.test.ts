@@ -140,6 +140,25 @@ describe('BusinessResearchRepository', () => {
     await expect(repository.saveEvidence(runId, [invalid])).rejects.toThrow('Invalid business research evidence.');
   });
 
+  it('persists fixture evidence with a reserved .invalid URL without treating it as a public source', async () => {
+    const repository = new BusinessResearchRepository(tempStore());
+    const runId = id('run', 'run-fixture-evidence');
+    const fixtureEvidence: BusinessResearchEvidence = {
+      ...evidence(),
+      id: id('evidence', 'evidence-fixture-reserved-url'),
+      sourceId: id('source', 'source-fixture-reserved-url'),
+      title: 'Illustrative fixture record',
+      url: 'https://example.invalid/business-research/fixture/1',
+      sourceKind: 'fixture',
+      grade: 'fixture_data',
+      excerpt: 'This fictional record is not a verified market fact.',
+    };
+
+    await repository.saveEvidence(runId, [fixtureEvidence]);
+
+    expect(await repository.getEvidence(runId)).toEqual([fixtureEvidence]);
+  });
+
   it('only appends the next valid event sequence and preserves the last durable prefix after an interrupted write', async () => {
     const store = new InterruptingJsonFileStore(mkdtempSync(join(tmpdir(), 'market-research-interrupted-write-')));
     const run = runRecord();

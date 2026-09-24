@@ -1,0 +1,13 @@
+{
+  "mode": "fixture",
+  "snapshotId": "northstar-update-v2",
+  "sources": [
+    {
+      "url": "https://public.example/fictional/northstar/update",
+      "title": "Illustrative fixture: Northstar Motors update",
+      "summary": "Fictional sample snapshot with a changed mock battery topic. This is not a public market fact.",
+      "contentFingerprint": "fixture-content-northstar-v2",
+      "retrievedAt": "2026-09-24T01:00:00.000Z"
+    }
+  ]
+}
