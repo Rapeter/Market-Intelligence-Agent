@@ -124,12 +124,12 @@ export interface BusinessResearchToolPort {
 - Create: `packages/shared/src/business-research/monitor-signals.ts`, `monitor-signals.test.ts`
 - Create: `packages/shared/src/business-research/evaluation/cases.ts`, `cases.test.ts`, `metrics.ts`, `metrics.test.ts`
 
-- [ ] Implement the six task objectives: industry landscape, competitor products, pricing/channels, public feedback signals, policy/technology risk, evidence conflict/change review.
-- [ ] Implement three strategy profiles: industry overview, competitor deep dive, and change/risk tracking; strategies affect priorities and budgets, not a fixed tool order.
-- [ ] Synthesize claims only from persisted evidence and record contrary evidence, unresolved questions, monitoring actions, and source grades; reject missing evidence IDs and case-unsupported citations.
-- [ ] Add 24 versioned executable cases in the spec distribution; annotate permitted actions, expected terminal/check outcome, evidence support, and expected trigger behavior.
-- [ ] Implement metric formulas from the spec, including p50 and nearest-rank p95, task completion, terminal/check accuracy, admissible tool selection, citation validity/coverage, recovery, trigger precision/recall, and sample/exclusion counts.
-- [ ] Run all 24 cases through the fixture runtime and assert the design thresholds; commit and push `feat: add enterprise research reports and evaluation corpus`.
+- [x] Implement the six task objectives: industry landscape, competitor products, pricing/channels, public feedback signals, policy/technology risk, evidence conflict/change review.
+- [x] Implement three strategy profiles: industry overview, competitor deep dive, and change/risk tracking; strategies affect priorities and budgets, not a fixed tool order.
+- [x] Synthesize claims only from persisted evidence and record contrary evidence, unresolved questions, monitoring actions, and source grades; reject missing evidence IDs and case-unsupported citations.
+- [x] Add 24 versioned executable cases in the spec distribution; annotate permitted actions, expected terminal/check outcome, evidence support, and expected trigger behavior.
+- [x] Implement metric formulas from the spec, including p50 and nearest-rank p95, task completion, terminal/check accuracy, admissible tool selection, citation validity/coverage, recovery, trigger precision/recall, and sample/exclusion counts.
+- [x] Run all 24 cases through the fixture runtime and assert the design thresholds; commit and push the report synthesis, evaluation corpus, and metric evaluator in separate verified increments.
 
 ### Task 6: Persist reports, runs, and topic subscriptions with recovery
 
