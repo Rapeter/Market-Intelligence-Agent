@@ -30,6 +30,7 @@ interface StoreShape {
 }
 
 const REDACTED = '[REDACTED]';
+export const BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID = 'internal:business-research:brave-search';
 
 /** Remove secret material from an arbitrary message string. */
 export function redactSecrets(message: string): string {
@@ -65,6 +66,14 @@ export class CredentialStore {
     return this.decrypt(entry.encrypted);
   }
 
+  /** Renderer-safe metadata for one stored credential; the value never leaves this store. */
+  async getCredentialMetadata(provider: string): Promise<{ configured: boolean; updatedAt?: number }> {
+    const entry = (await this.load()).credentials[provider];
+    return entry === undefined
+      ? { configured: false }
+      : { configured: true, ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }) };
+  }
+
   async setCredential(provider: string, apiKey: string): Promise<void> {
     await this.mutate((store) => {
       store.credentials[provider] = {
@@ -83,14 +92,16 @@ export class CredentialStore {
   /** Renderer-safe metadata: no secrets. */
   async listCredentials(): Promise<CredentialInfo[]> {
     const store = await this.load();
-    const infos: CredentialInfo[] = Object.entries(store.credentials).map(
+    const infos: CredentialInfo[] = Object.entries(store.credentials)
+      .filter(([provider]) => provider !== BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID)
+      .map(
       ([provider, entry]) => ({
         provider,
         configured: true,
         updatedAt: entry.updatedAt,
         custom: false,
       })
-    );
+      );
     for (const [name, record] of Object.entries(store.customProviders)) {
       infos.push({
         provider: name,

@@ -325,6 +325,18 @@ mock.module('@finagent/shared', () => ({
     redactToolCall = (toolCall: unknown) => toolCall;
   },
   PiRuntimeAdapter: class {},
+  PiRpcClient: class {
+    async setModel() { return undefined; }
+    async setThinkingLevel() { return undefined; }
+    async switchSession() { return undefined; }
+    promptStreaming() {
+      return {
+        async *[Symbol.asyncIterator]() { yield { kind: 'end', result: { answer: '{}' } } as const; },
+        async abort() {},
+      };
+    }
+    async dispose() {}
+  },
   sanitizeSettings: (input: unknown) => input,
   embeddedDatasets: [],
 }));
@@ -341,7 +353,7 @@ mock.module('@finagent/skill-hub', () => ({
   skillCapabilityMap: {},
 }));
 
-const { AgentKernelHost } = await import('./kernelHost.ts');
+const { AgentKernelHost, retryTransientMonitorProbe } = await import('./kernelHost.ts');
 
 // The constructor sets FINAGENT_PI_EXTENSION as a process-wide side effect;
 // restore it so sibling test files (shared process) see the default args.
@@ -371,6 +383,40 @@ describe('AgentKernelHost', () => {
       piSessionDir: join('/tmp/finagent-test', 'pi-sessions'),
     });
     host.dispose();
+  });
+
+  it('keeps Brave credential responses metadata-only and validates research IPC inputs', async () => {
+    const host = new AgentKernelHost();
+    const metadata = await host.businessResearchCredentialStatus();
+    expect(metadata).toHaveProperty('configured');
+    expect(Object.keys(metadata).some((key) => /key|provider|secret/iu.test(key))).toBe(false);
+    await expect(host.businessResearchSetBraveKey({ apiKey: 'short' })).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+    });
+    await expect(host.businessResearchGetRun({ runId: '../outside' })).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+    });
+    await expect(host.businessResearchSubscribe({ task: {} })).rejects.toMatchObject({
+      code: 'BUSINESS_RESEARCH_INVALID_INPUT',
+    });
+    await host.dispose();
+  });
+
+  it('retries only a transient monitor provider failure once', async () => {
+    let attempts = 0;
+    await expect(retryTransientMonitorProbe(new AbortController().signal, async () => {
+      attempts += 1;
+      if (attempts === 1) throw Object.assign(new Error('temporary outage'), { code: 'PROVIDER_UNAVAILABLE' });
+      return 'available';
+    })).resolves.toBe('available');
+    expect(attempts).toBe(2);
+
+    attempts = 0;
+    await expect(retryTransientMonitorProbe(new AbortController().signal, async () => {
+      attempts += 1;
+      throw Object.assign(new Error('authentication rejected'), { code: 'AUTHENTICATION_FAILED' });
+    })).rejects.toMatchObject({ code: 'AUTHENTICATION_FAILED' });
+    expect(attempts).toBe(1);
   });
 
   it('hydrates sessions from the kernel', async () => {

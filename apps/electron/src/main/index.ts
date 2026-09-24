@@ -217,6 +217,56 @@ ipcMain.handle('research:getReport', async (_event, input: unknown) =>
   toIpcResult(() => agentKernelHost.researchGetReport(input))
 );
 
+// Business research is exposed as validated lifecycle/report/monitor operations only.
+ipcMain.handle('businessResearch:getCredentialStatus', async () =>
+  toIpcResult(() => agentKernelHost.businessResearchCredentialStatus())
+);
+ipcMain.handle('businessResearch:setBraveKey', async (_event, input: unknown) =>
+  toIpcResult(() => agentKernelHost.businessResearchSetBraveKey(input))
+);
+ipcMain.handle('businessResearch:removeBraveKey', async () =>
+  toIpcResult(() => agentKernelHost.businessResearchRemoveBraveKey())
+);
+ipcMain.handle('businessResearch:start', async (_event, input: unknown) =>
+  toIpcResult(() => agentKernelHost.businessResearchStart(input))
+);
+ipcMain.handle('businessResearch:cancel', async (_event, input: unknown) =>
+  toIpcResult(() => agentKernelHost.businessResearchCancel(input))
+);
+ipcMain.handle('businessResearch:listRuns', async () =>
+  toIpcResult(() => agentKernelHost.businessResearchListRuns())
+);
+ipcMain.handle('businessResearch:getRun', async (_event, input: unknown) =>
+  toIpcResult(() => agentKernelHost.businessResearchGetRun(input))
+);
+ipcMain.handle('businessResearch:listEvents', async (_event, input: unknown) =>
+  toIpcResult(() => agentKernelHost.businessResearchListEvents(input))
+);
+ipcMain.handle('businessResearch:listReports', async () =>
+  toIpcResult(() => agentKernelHost.businessResearchListReports())
+);
+ipcMain.handle('businessResearch:getReport', async (_event, input: unknown) =>
+  toIpcResult(() => agentKernelHost.businessResearchGetReport(input))
+);
+ipcMain.handle('businessResearch:evaluate', async () =>
+  toIpcResult(() => agentKernelHost.businessResearchEvaluate())
+);
+ipcMain.handle('businessResearch:subscribe', async (_event, input: unknown) =>
+  toIpcResult(() => agentKernelHost.businessResearchSubscribe(input))
+);
+ipcMain.handle('businessResearch:unsubscribe', async (_event, input: unknown) =>
+  toIpcResult(() => agentKernelHost.businessResearchUnsubscribe(input))
+);
+ipcMain.handle('businessResearch:listSubscriptions', async () =>
+  toIpcResult(() => agentKernelHost.businessResearchListSubscriptions())
+);
+ipcMain.handle('businessResearch:listChecks', async (_event, input: unknown) =>
+  toIpcResult(() => agentKernelHost.businessResearchListChecks(input))
+);
+ipcMain.handle('businessResearch:checkDue', async () =>
+  toIpcResult(() => agentKernelHost.businessResearchCheckDue())
+);
+
 ipcMain.handle('thesis:list', async (_event, symbol?: unknown) =>
   toIpcResult(() => agentKernelHost.thesisList(symbol))
 );

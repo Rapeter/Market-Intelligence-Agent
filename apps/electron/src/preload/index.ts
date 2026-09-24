@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import { createBusinessResearchBridge, type BusinessResearchBridgeApi } from './businessResearchBridge.ts';
 
 interface ProviderSettingsInput {
   apiKey?: string;
@@ -67,6 +68,7 @@ export interface ElectronAPI {
     getReport: (input: { reportId: string }) => Promise<unknown>;
     getDiff: (input: { symbol: string }) => Promise<unknown>;
   };
+  businessResearch: BusinessResearchBridgeApi;
   thesis: {
     list: (symbol?: string) => Promise<unknown>;
     getReport: (symbol: string) => Promise<unknown>;
@@ -270,6 +272,7 @@ const electronAPI: ElectronAPI = {
     getReport: (input: { reportId: string }) => ipcRenderer.invoke('research:getReport', input),
     getDiff: (input: { symbol: string }) => ipcRenderer.invoke('research:getDiff', input),
   },
+  businessResearch: createBusinessResearchBridge((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
   thesis: {
     list: (symbol?: string) => ipcRenderer.invoke('thesis:list', symbol),
     getReport: (symbol: string) => ipcRenderer.invoke('thesis:getReport', symbol),

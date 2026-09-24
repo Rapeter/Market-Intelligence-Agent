@@ -70,8 +70,12 @@ import type {
   ToolCall,
   ToolCallRecord,
   TraceReference,
+  BusinessResearchRunId,
+  BusinessResearchReportId,
+  BusinessResearchSubscriptionId,
+  BusinessResearchIdKind,
 } from '@finagent/core';
-import { DEFAULT_INSTRUMENT_CATALOG, InstrumentResolver, STRATEGY_IDS } from '@finagent/core';
+import { DEFAULT_INSTRUMENT_CATALOG, InstrumentResolver, parseBusinessResearchId, STRATEGY_IDS } from '@finagent/core';
 import { isLocalePreference } from '@finagent/i18n';
 import { createAppPreferencesService, type AppPreferencesService } from './app-preferences.ts';
 import { buildImpactPrompt, buildRiskSummaryPrompt, buildSynthesisPrompt } from './research-prompts.ts';
@@ -144,6 +148,7 @@ import {
   currentFolioVersion,
   EvaluationRedactor,
   PiRuntimeAdapter,
+  PiRpcClient,
   sanitizeSettings,
   embeddedDatasets,
   isRecord,
@@ -159,6 +164,16 @@ import {
   type WatchlistQuote,
   withDemoDataFallback,
 } from '@finagent/shared';
+import {
+  BusinessResearchRepository,
+  BusinessResearchScheduler,
+  BusinessResearchService,
+  createBraveBusinessResearchTools,
+  createPiBusinessResearchAdapter,
+  evaluateBusinessResearchEvaluationCorpus,
+  type BusinessResearchToolPort,
+  type BusinessResearchMonitorSourceSnapshot,
+} from '@finagent/shared/business-research';
 import {
   LongbridgeBrokerAccountProvider,
   LongbridgeFinancialDataProvider,
@@ -183,7 +198,7 @@ import {
   type DiagnosticsBundle,
   type FinancialProviderSummary,
 } from '@finagent/shared/diagnostics';
-import { CredentialStore, redactSecrets } from './credentialStore.ts';
+import { BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID, CredentialStore, redactSecrets } from './credentialStore.ts';
 import { executeLongBridge } from '@finagent/longbridge-tools';
 
 /** Renderer-facing mirror of the Connections IPC contract (ui/client/connections.ts). */
@@ -263,6 +278,10 @@ export class AgentKernelHost {
   private readonly registry: CapabilityRegistry;
   private readonly executor: CapabilityExecutor;
   private readonly researchService: ResearchService;
+  private readonly businessResearchRepository: BusinessResearchRepository;
+  private readonly businessResearchService: BusinessResearchService;
+  private readonly businessResearchScheduler: BusinessResearchScheduler;
+  private readonly businessResearchPiRpc?: PiRpcClient;
   private readonly outcomeRepository: OutcomeRepository;
   private readonly outcomeService: OutcomeService;
   private readonly screeningService: ScreeningService;
@@ -465,6 +484,83 @@ export class AgentKernelHost {
       store: this.evaluationStore,
     });
     this.applyRuntimeExtensions();
+
+    this.businessResearchRepository = new BusinessResearchRepository(new JsonFileStore(userData));
+    const businessResearchSessionDir = join(userData, 'business-research-pi-sessions');
+    const businessResearchAdapter = provider === 'local'
+      ? undefined
+      : createPiBusinessResearchAdapter({
+          rpc: this.businessResearchPiRpc = new PiRpcClient({
+            command: process.env.FINAGENT_PI_COMMAND ?? 'bunx',
+            args: createBusinessResearchPiArgs(businessResearchSessionDir),
+            cwd: getPiCwd(),
+            sessionDir: businessResearchSessionDir,
+            requiredEnvKeys: readRequiredLlmEnvKeys(),
+            env: async () => ({
+              ...await this.buildRuntimeEnv(),
+              FINAGENT_BUSINESS_RESEARCH_ONLY: '1',
+              FINAGENT_BRAVE_SEARCH_API_KEY:
+                await this.credentials.getCredential(BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID) ?? '',
+            }),
+          }),
+          sessionDirectory: businessResearchSessionDir,
+          prepareRequest: async () => {
+            const activeLlm = this.kernel.getLlmApi();
+            if (!activeLlm) return;
+            const state = await activeLlm.getState();
+            if (state.model?.provider && state.model.id) {
+              await this.businessResearchPiRpc?.setModel(state.model.provider, state.model.id);
+            }
+            if (state.thinkingLevel) await this.businessResearchPiRpc?.setThinkingLevel(state.thinkingLevel);
+          },
+        });
+    this.businessResearchService = new BusinessResearchService(this.businessResearchRepository, {
+      createDecisionModel: (runId) => businessResearchAdapter?.createDecisionModel(runId) ?? {
+        async decide() {
+          throw createCodeError('BUSINESS_RESEARCH_PI_UNAVAILABLE', 'Configure an available Pi model runtime to run research.');
+        },
+      },
+      createTools: () => createCredentialBackedBraveTools(
+        () => this.credentials.getCredential(BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID),
+      ),
+      generateReport: (input) => {
+        if (!businessResearchAdapter) {
+          throw createCodeError('BUSINESS_RESEARCH_PI_UNAVAILABLE', 'Configure an available Pi model runtime to write reports.');
+        }
+        return businessResearchAdapter.generateReport(input);
+      },
+    });
+    this.businessResearchScheduler = new BusinessResearchScheduler(
+      this.businessResearchRepository,
+      this.businessResearchService,
+      {
+        probe: (input) => retryTransientMonitorProbe(input.signal, async () => {
+          const tools = createCredentialBackedBraveTools(
+            () => this.credentials.getCredential(BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID),
+          );
+          const found = await tools.searchWeb(input.query, input.signal);
+          const snapshots: BusinessResearchMonitorSourceSnapshot[] = [];
+          for (const result of found.slice(0, 5)) {
+            let snapshot = result;
+            try {
+              snapshot = await tools.openSource(result.id, input.signal);
+            } catch {
+              // A search excerpt can still be compared; it remains labeled as unverified evidence.
+            }
+            snapshots.push({
+              url: snapshot.url,
+              title: snapshot.title,
+              summary: snapshot.excerpt,
+              contentFingerprint: createHash('sha256').update(snapshot.excerpt).digest('hex'),
+              retrievedAt: snapshot.retrievedAt,
+            });
+          }
+          return snapshots;
+        }),
+      },
+    );
+    this.businessResearchScheduler.start();
+
     this.unsubscribeEval = this.kernel.runs.subscribe((event) => void this.observeRunEvent(event));
     void this.refreshEvaluationBackend();
     void this.skillHub.loadSkills();
@@ -734,6 +830,94 @@ export class AgentKernelHost {
   async researchGetReport(input: unknown): Promise<ResearchReport | undefined> {
     const request = requireObject(input);
     return this.researchService.getReport(requireString(request.reportId, 'reportId'));
+  }
+
+  async businessResearchCredentialStatus(): Promise<{ configured: boolean; updatedAt?: number }> {
+    return this.credentials.getCredentialMetadata(BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID);
+  }
+
+  async businessResearchSetBraveKey(input: unknown): Promise<{ configured: boolean; updatedAt?: number }> {
+    const request = requireObject(input);
+    const apiKey = requireString(request.apiKey, 'apiKey').trim();
+    if (apiKey.length < 12 || apiKey.length > 4_096) {
+      throw createCodeError('INVALID_ARGUMENT', 'Brave Search API key must be between 12 and 4096 characters.');
+    }
+    await this.credentials.setCredential(BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID, apiKey);
+    return this.businessResearchCredentialStatus();
+  }
+
+  async businessResearchRemoveBraveKey(): Promise<{ configured: boolean; updatedAt?: number }> {
+    await this.credentials.removeCredential(BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID);
+    return this.businessResearchCredentialStatus();
+  }
+
+  async businessResearchStart(input: unknown) {
+    const request = requireObject(input);
+    return this.businessResearchService.start(request.task ?? request);
+  }
+
+  async businessResearchCancel(input: unknown): Promise<boolean> {
+    const request = requireObject(input);
+    return this.businessResearchService.cancel(requireBusinessResearchId('run', request.runId) as BusinessResearchRunId);
+  }
+
+  async businessResearchListRuns() {
+    return this.businessResearchService.listRuns();
+  }
+
+  async businessResearchGetRun(input: unknown) {
+    const request = requireObject(input);
+    return this.businessResearchService.getRun(requireBusinessResearchId('run', request.runId) as BusinessResearchRunId);
+  }
+
+  async businessResearchListEvents(input: unknown) {
+    const request = requireObject(input);
+    return this.businessResearchService.listEvents(requireBusinessResearchId('run', request.runId) as BusinessResearchRunId);
+  }
+
+  async businessResearchListReports() {
+    return this.businessResearchService.listReports();
+  }
+
+  async businessResearchGetReport(input: unknown) {
+    const request = requireObject(input);
+    return this.businessResearchService.getReport(requireBusinessResearchId('report', request.reportId) as BusinessResearchReportId);
+  }
+
+  async businessResearchEvaluate() {
+    return evaluateBusinessResearchEvaluationCorpus();
+  }
+
+  async businessResearchSubscribe(input: unknown) {
+    const request = requireObject(input);
+    if (request.intervalMs !== undefined && (typeof request.intervalMs !== 'number' || !Number.isSafeInteger(request.intervalMs))) {
+      throw createCodeError('INVALID_ARGUMENT', 'intervalMs must be a safe integer.');
+    }
+    return this.businessResearchService.subscribe(request.task ?? request, {
+      intervalMs: request.intervalMs as number | undefined,
+    });
+  }
+
+  async businessResearchUnsubscribe(input: unknown) {
+    const request = requireObject(input);
+    return this.businessResearchService.unsubscribe(
+      requireBusinessResearchId('subscription', request.subscriptionId) as BusinessResearchSubscriptionId,
+    );
+  }
+
+  async businessResearchListSubscriptions() {
+    return this.businessResearchService.listSubscriptions();
+  }
+
+  async businessResearchListChecks(input: unknown) {
+    const request = requireObject(input);
+    return this.businessResearchRepository.listChecks(
+      requireBusinessResearchId('subscription', request.subscriptionId) as BusinessResearchSubscriptionId,
+    );
+  }
+
+  async businessResearchCheckDue() {
+    return this.businessResearchScheduler.checkDue();
   }
 
   // -- Investment Thesis -----------------------------------------------------
@@ -2572,6 +2756,9 @@ export class AgentKernelHost {
 
   async dispose() {
     this.alertEngine.stop();
+    await this.businessResearchScheduler.dispose();
+    await this.businessResearchService.dispose();
+    await this.businessResearchPiRpc?.dispose();
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.unsubscribeEval?.();
@@ -2581,6 +2768,67 @@ export class AgentKernelHost {
     this.window = null;
     await this.kernel.dispose();
   }
+}
+
+function requireBusinessResearchId<Kind extends BusinessResearchIdKind>(kind: Kind, value: unknown) {
+  const parsed = parseBusinessResearchId(kind, value);
+  if (parsed === undefined) throw createCodeError('INVALID_ARGUMENT', `${kind} id is invalid.`);
+  return parsed;
+}
+
+function createBusinessResearchPiArgs(sessionDirectory: string): string[] {
+  const args = [
+    '@mariozechner/pi-coding-agent',
+    '--mode',
+    'rpc',
+    '--provider',
+    process.env.FINAGENT_PI_PROVIDER ?? 'anthropic',
+  ];
+  const model = process.env.FINAGENT_PI_MODEL ?? process.env.ANTHROPIC_MODEL;
+  if (model) args.push('--model', model);
+  args.push('--extension', getPiExtensionEntry(), '--session-dir', sessionDirectory);
+  return args;
+}
+
+function createCredentialBackedBraveTools(
+  getApiKey: () => Promise<string | undefined>,
+): BusinessResearchToolPort {
+  let tools: Promise<BusinessResearchToolPort> | undefined;
+  const getTools = () => {
+    tools ??= getApiKey().then((apiKey) => createBraveBusinessResearchTools({ apiKey: apiKey ?? '' }));
+    return tools;
+  };
+  return {
+    searchWeb: async (query, signal) => (await getTools()).searchWeb(query, signal),
+    openSource: async (evidenceId, signal) => (await getTools()).openSource(evidenceId, signal),
+  };
+}
+
+export async function retryTransientMonitorProbe<T>(signal: AbortSignal, action: () => Promise<T>): Promise<T> {
+  try {
+    return await action();
+  } catch (error) {
+    const code = isCodeError(error) ? error.code : '';
+    if (signal.aborted || code !== 'PROVIDER_UNAVAILABLE') throw error;
+    await waitForMonitorRetry(signal);
+    return action();
+  }
+}
+
+function waitForMonitorRetry(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.reject(createCodeError('BUSINESS_RESEARCH_CANCELLED', 'Monitoring check cancelled.'));
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', abort);
+      resolve();
+    }, 200);
+    const abort = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', abort);
+      reject(createCodeError('BUSINESS_RESEARCH_CANCELLED', 'Monitoring check cancelled.'));
+    };
+    signal.addEventListener('abort', abort, { once: true });
+  });
 }
 
 function getLongBridgeStatusAction(status: string) {

@@ -28,7 +28,7 @@ mock.module('electron', () => ({
   },
 }));
 
-const { redactSecrets, CredentialStore } = await import('./credentialStore.ts');
+const { BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID, redactSecrets, CredentialStore } = await import('./credentialStore.ts');
 let dir = '';
 let file = '';
 
@@ -74,6 +74,18 @@ describe('CredentialStore', () => {
     await store.removeCredential('anthropic');
 
     expect(await store.getCredential('anthropic')).toBeUndefined();
+    expect(await store.listCredentials()).toEqual([]);
+  });
+
+  it('keeps the Brave research key encrypted and out of the renderer LLM-provider list', async () => {
+    const store = new CredentialStore(file);
+    expect(await store.getCredentialMetadata(BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID)).toEqual({ configured: false });
+    await store.setCredential(BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID, 'brave-api-secret-123456');
+
+    const raw = await readFile(file, 'utf8');
+    expect(raw).not.toContain('brave-api-secret-123456');
+    expect(await store.getCredential(BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID)).toBe('brave-api-secret-123456');
+    expect(await store.getCredentialMetadata(BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID)).toMatchObject({ configured: true });
     expect(await store.listCredentials()).toEqual([]);
   });
 

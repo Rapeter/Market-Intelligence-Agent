@@ -240,6 +240,24 @@ export interface FinagentClient {
     getReport: (input: { reportId: string }) => Promise<ApiResult<ResearchReport | undefined>>;
     getDiff: (input: { symbol: string }) => Promise<ApiResult<ResearchDiff | undefined>>;
   };
+  businessResearch?: {
+    getCredentialStatus: () => Promise<ApiResult<{ configured: boolean; updatedAt?: number }>>;
+    setBraveKey: (apiKey: string) => Promise<ApiResult<{ configured: boolean; updatedAt?: number }>>;
+    removeBraveKey: () => Promise<ApiResult<{ configured: boolean; updatedAt?: number }>>;
+    start: (task: unknown) => Promise<ApiResult<unknown>>;
+    cancel: (runId: string) => Promise<ApiResult<boolean>>;
+    listRuns: () => Promise<ApiResult<unknown[]>>;
+    getRun: (runId: string) => Promise<ApiResult<unknown>>;
+    listEvents: (runId: string) => Promise<ApiResult<unknown[]>>;
+    listReports: () => Promise<ApiResult<unknown[]>>;
+    getReport: (reportId: string) => Promise<ApiResult<unknown>>;
+    evaluate: () => Promise<ApiResult<unknown>>;
+    subscribe: (task: unknown, intervalMs?: number) => Promise<ApiResult<unknown>>;
+    unsubscribe: (subscriptionId: string) => Promise<ApiResult<unknown>>;
+    listSubscriptions: () => Promise<ApiResult<unknown[]>>;
+    listChecks: (subscriptionId: string) => Promise<ApiResult<unknown[]>>;
+    checkDue: () => Promise<ApiResult<unknown[]>>;
+  };
   screening?: ScreeningChannel;
   outcome?: {
     listOpinions: (input: { symbol?: string }) => Promise<ApiResult<ResearchOpinion[]>>;
@@ -361,6 +379,24 @@ export const fallbackClient: FinagentClient = {
     listReports: missingClient('research.listReports'),
     getReport: missingClient('research.getReport'),
     getDiff: missingClient('research.getDiff'),
+  },
+  businessResearch: {
+    getCredentialStatus: missingClient('businessResearch.getCredentialStatus'),
+    setBraveKey: missingClient('businessResearch.setBraveKey'),
+    removeBraveKey: missingClient('businessResearch.removeBraveKey'),
+    start: missingClient('businessResearch.start'),
+    cancel: missingClient('businessResearch.cancel'),
+    listRuns: missingClient('businessResearch.listRuns'),
+    getRun: missingClient('businessResearch.getRun'),
+    listEvents: missingClient('businessResearch.listEvents'),
+    listReports: missingClient('businessResearch.listReports'),
+    getReport: missingClient('businessResearch.getReport'),
+    evaluate: missingClient('businessResearch.evaluate'),
+    subscribe: missingClient('businessResearch.subscribe'),
+    unsubscribe: missingClient('businessResearch.unsubscribe'),
+    listSubscriptions: missingClient('businessResearch.listSubscriptions'),
+    listChecks: missingClient('businessResearch.listChecks'),
+    checkDue: missingClient('businessResearch.checkDue'),
   },
   screening: {
     run: missingClient('screening.run'),
