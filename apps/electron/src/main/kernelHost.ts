@@ -1,5 +1,6 @@
-import { join } from 'node:path';
-import { createHash } from 'node:crypto';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { isAbsolute, join, relative, sep } from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { app, Notification, shell, type BrowserWindow } from 'electron';
 import type {
@@ -76,7 +77,14 @@ import type {
   BusinessResearchIdKind,
   BusinessResearchRunMode,
 } from '@finagent/core';
-import { DEFAULT_INSTRUMENT_CATALOG, InstrumentResolver, isBusinessResearchRunMode, parseBusinessResearchId, STRATEGY_IDS } from '@finagent/core';
+import {
+  DEFAULT_INSTRUMENT_CATALOG,
+  InstrumentResolver,
+  isBusinessResearchRunMode,
+  normalizeBusinessResearchInput,
+  parseBusinessResearchId,
+  STRATEGY_IDS,
+} from '@finagent/core';
 import { isLocalePreference } from '@finagent/i18n';
 import { createAppPreferencesService, type AppPreferencesService } from './app-preferences.ts';
 import { buildImpactPrompt, buildRiskSummaryPrompt, buildSynthesisPrompt } from './research-prompts.ts';
@@ -177,6 +185,7 @@ import {
   createBusinessResearchFixtureReportDraft,
   type BusinessResearchToolPort,
   type BusinessResearchMonitorSourceSnapshot,
+  type PiBusinessResearchAdapter,
 } from '@finagent/shared/business-research';
 import {
   LongbridgeBrokerAccountProvider,
@@ -203,6 +212,8 @@ import {
   type FinancialProviderSummary,
 } from '@finagent/shared/diagnostics';
 import { BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID, CredentialStore, redactSecrets } from './credentialStore.ts';
+import { runBusinessResearchLiveCounterfactuals } from './businessResearchLiveE2e.ts';
+import { isBusinessResearchLiveE2eEnabled } from '../businessResearchLiveE2eMode.ts';
 import { executeLongBridge } from '@finagent/longbridge-tools';
 
 /** Renderer-facing mirror of the Connections IPC contract (ui/client/connections.ts). */
@@ -286,6 +297,7 @@ export class AgentKernelHost {
   private readonly businessResearchService: BusinessResearchService;
   private readonly businessResearchScheduler: BusinessResearchScheduler;
   private readonly businessResearchPiRpc?: PiRpcClient;
+  private readonly businessResearchAdapter?: PiBusinessResearchAdapter;
   private readonly outcomeRepository: OutcomeRepository;
   private readonly outcomeService: OutcomeService;
   private readonly screeningService: ScreeningService;
@@ -491,7 +503,7 @@ export class AgentKernelHost {
 
     this.businessResearchRepository = new BusinessResearchRepository(new JsonFileStore(userData));
     const businessResearchSessionDir = join(userData, 'business-research-pi-sessions');
-    const businessResearchAdapter = provider === 'local'
+    this.businessResearchAdapter = provider === 'local'
       ? undefined
       : createPiBusinessResearchAdapter({
           rpc: this.businessResearchPiRpc = new PiRpcClient({
@@ -521,7 +533,7 @@ export class AgentKernelHost {
     this.businessResearchService = new BusinessResearchService(this.businessResearchRepository, {
       createDecisionModel: (runId, task, mode) => mode === 'fixture'
         ? createBusinessResearchFixtureDecisionModel(task)
-        : businessResearchAdapter?.createDecisionModel(runId) ?? {
+        : this.businessResearchAdapter?.createDecisionModel(runId) ?? {
             async decide() {
               throw createCodeError('BUSINESS_RESEARCH_PI_UNAVAILABLE', 'Configure an available Pi model runtime to run research.');
             },
@@ -533,10 +545,10 @@ export class AgentKernelHost {
           ),
       generateReport: async (input) => {
         if (input.mode === 'fixture') return createBusinessResearchFixtureReportDraft(input);
-        if (!businessResearchAdapter) {
+        if (!this.businessResearchAdapter) {
           throw createCodeError('BUSINESS_RESEARCH_PI_UNAVAILABLE', 'Configure an available Pi model runtime to write reports.');
         }
-        return businessResearchAdapter.generateReport(input);
+        return this.businessResearchAdapter.generateReport(input);
       },
     });
     this.businessResearchScheduler = new BusinessResearchScheduler(
@@ -945,6 +957,147 @@ export class AgentKernelHost {
 
   async businessResearchCheckDue() {
     return this.businessResearchScheduler.checkDue();
+  }
+
+  async businessResearchRunLiveCounterfactualProbes(input: unknown) {
+    this.assertBusinessResearchLiveE2eEnabled();
+    const request = requireObject(input);
+    const normalized = normalizeBusinessResearchInput(request.task);
+    if (!normalized.ok) {
+      throw createCodeError('BUSINESS_RESEARCH_INVALID_INPUT', 'Invalid live counterfactual research task.');
+    }
+    if (!this.businessResearchAdapter) {
+      throw createCodeError('BUSINESS_RESEARCH_PI_UNAVAILABLE', 'Configure a live Pi model before running acceptance.');
+    }
+    const credential = await this.businessResearchCredentialStatus();
+    if (!credential.configured) {
+      throw createCodeError('BUSINESS_RESEARCH_BRAVE_CREDENTIAL_MISSING', 'Configure Brave Search before running acceptance.');
+    }
+
+    const state = await this.getLlmState();
+    const modelProvider = typeof state.model?.provider === 'string' ? state.model.provider : undefined;
+    const modelId = typeof state.model?.id === 'string' ? state.model.id : undefined;
+    if (!modelProvider || !modelId) {
+      throw createCodeError('BUSINESS_RESEARCH_MODEL_UNAVAILABLE', 'Select an available model before running acceptance.');
+    }
+
+    const startedAt = Date.now();
+    const controller = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 150_000);
+    try {
+      const result = await runBusinessResearchLiveCounterfactuals({
+        task: normalized.value,
+        tools: createCredentialBackedBraveTools(
+          () => this.credentials.getCredential(BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID),
+        ),
+        createDecisionModel: (runId) => this.businessResearchAdapter!.createDecisionModel(runId),
+        createRunId: () => {
+          const parsed = parseBusinessResearchId('run', `run-live-e2e-${randomUUID()}`);
+          if (parsed === undefined) {
+            throw createCodeError('BUSINESS_RESEARCH_INVALID_ID', 'Could not create a live probe identifier.');
+          }
+          return parsed as BusinessResearchRunId;
+        },
+        sanitizeText: redactSecrets,
+        signal: controller.signal,
+      });
+      return {
+        model: { provider: modelProvider, id: modelId },
+        elapsedMs: Date.now() - startedAt,
+        ...result,
+      };
+    } catch (error) {
+      if (timedOut) {
+        throw createCodeError('BUSINESS_RESEARCH_LIVE_E2E_TIMEOUT', 'Live counterfactual acceptance exceeded 150 seconds.');
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async businessResearchCheckSubscriptionNow(input: unknown) {
+    this.assertBusinessResearchLiveE2eEnabled();
+    const request = requireObject(input);
+    const subscriptionId = parseBusinessResearchId('subscription', request.subscriptionId) as
+      | BusinessResearchSubscriptionId
+      | undefined;
+    if (subscriptionId === undefined) {
+      throw createCodeError('INVALID_ARGUMENT', 'subscriptionId must be a valid subscription id.');
+    }
+    const subscription = await this.businessResearchRepository.getSubscription(subscriptionId);
+    if (subscription === undefined || !subscription.enabled) {
+      throw createCodeError('BUSINESS_RESEARCH_SUBSCRIPTION_UNAVAILABLE', 'The live acceptance subscription is unavailable.');
+    }
+    if (!(await this.businessResearchCredentialStatus()).configured) {
+      throw createCodeError('BUSINESS_RESEARCH_BRAVE_CREDENTIAL_MISSING', 'Configure Brave Search before running acceptance.');
+    }
+
+    const now = Date.now();
+    await this.businessResearchRepository.saveSubscription({ ...subscription, updatedAt: now, nextCheckAt: now });
+    const checks = await this.businessResearchScheduler.checkDue();
+    const check = checks.find((item) => item.subscriptionId === subscriptionId);
+    if (check === undefined) {
+      throw createCodeError('BUSINESS_RESEARCH_LIVE_E2E_CHECK_MISSING', 'The real subscription check did not complete.');
+    }
+    const run = check.runId === undefined
+      ? undefined
+      : await this.businessResearchService.waitForRun(check.runId);
+    if (run !== undefined && run.mode !== 'live') {
+      throw createCodeError('BUSINESS_RESEARCH_LIVE_E2E_FIXTURE_RUN', 'The live monitor created a non-live research run.');
+    }
+    return {
+      check: {
+        id: check.id,
+        subscriptionId: check.subscriptionId,
+        decision: check.decision,
+        runId: check.runId ?? null,
+        startedAt: check.startedAt,
+        completedAt: check.completedAt,
+      },
+      followUpRun: run === undefined
+        ? null
+        : {
+          id: run.id,
+          mode: run.mode,
+          status: run.state.status,
+          reportId: run.reportId ?? null,
+          failureCode: run.state.status === 'failed' ? run.state.code : null,
+        },
+    };
+  }
+
+  private assertBusinessResearchLiveE2eEnabled(): void {
+    if (!isBusinessResearchLiveE2eEnabled({
+      isPackaged: app.isPackaged,
+      e2e: process.env.FINAGENT_E2E,
+      liveE2e: process.env.FINAGENT_LIVE_E2E,
+    })) {
+      throw createCodeError('BUSINESS_RESEARCH_LIVE_E2E_DISABLED', 'Live acceptance operations are disabled.');
+    }
+
+    try {
+      const profilePath = app.getPath('userData');
+      if (!isAbsolute(profilePath)) throw new Error('Profile path is not absolute.');
+      const profile = realpathSync(profilePath);
+      const repository = realpathSync(process.cwd());
+      if (isSameOrChildPath(profile, repository)) throw new Error('Profile is inside the repository.');
+      const markerPath = join(profile, '.market-intelligence-live-e2e.json');
+      if (!existsSync(markerPath)) throw new Error('Profile marker is missing.');
+      const marker: unknown = JSON.parse(readFileSync(markerPath, 'utf8'));
+      if (!isRecord(marker) || marker.purpose !== 'market-intelligence-agent-live-e2e' || marker.schemaVersion !== 1) {
+        throw new Error('Profile marker is invalid.');
+      }
+    } catch {
+      throw createCodeError(
+        'BUSINESS_RESEARCH_LIVE_E2E_DISABLED',
+        'Live acceptance requires a marked dedicated profile outside the repository.',
+      );
+    }
   }
 
   // -- Investment Thesis -----------------------------------------------------
@@ -2957,6 +3110,11 @@ function requireObject(value: unknown): Record<string, unknown> {
     throw createCodeError('INVALID_ARGUMENT', 'Expected an object payload.');
   }
   return value as Record<string, unknown>;
+}
+
+function isSameOrChildPath(candidate: string, parent: string): boolean {
+  const childPath = relative(parent, candidate);
+  return childPath === '' || (!childPath.startsWith(`..${sep}`) && childPath !== '..' && !isAbsolute(childPath));
 }
 
 function createCodeError(code: string, message: string, action?: string) {

@@ -157,6 +157,7 @@ try {
     return result?.ok && result.data?.length ? result.data[0] : false;
   }, null, { timeout: 15_000 });
   const subscription = await subscribed.jsonValue();
+  assert.equal(typeof subscription?.id, 'string', `Subscription IPC returned an unexpected record: ${JSON.stringify(subscription)}`);
   const monitorRow = page.getByTestId(`business-research-monitor-${subscription.id}`);
   await monitorRow.getByRole('button', { name: 'Pause' }).click();
   await page.waitForFunction(async (subscriptionId) => {

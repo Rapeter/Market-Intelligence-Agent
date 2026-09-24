@@ -12,7 +12,7 @@
   "checksPersisted": 3,
   "duplicateSuppressed": true,
   "elapsedMs": [
-    52,
+    56,
     38,
     4
   ],
@@ -24,7 +24,7 @@
       "reason": "new_source",
       "runMode": "fixture",
       "runId": "run-monitor-check-1",
-      "elapsedMs": 52
+      "elapsedMs": 56
     },
     {
       "snapshotId": "northstar-update-v2",

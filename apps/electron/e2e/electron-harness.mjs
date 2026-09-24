@@ -64,7 +64,7 @@ function tryResolve(packagePath) {
 }
 
 export function buildElectronEnvironment(
-  { userDataDir, agentProvider = 'local', visible = false },
+  { userDataDir, agentProvider = 'local', visible = false, liveE2e = false },
   sourceEnv = process.env,
 ) {
   if (agentProvider !== 'local' && agentProvider !== 'pi-runtime') {
@@ -78,13 +78,15 @@ export function buildElectronEnvironment(
     FINAGENT_AGENT_PROVIDER: agentProvider,
     FINAGENT_FORCE_PROD_LOAD: '1',
     FINAGENT_E2E: '1',
+    FINAGENT_PACKAGED: '0',
+    FINAGENT_LIVE_E2E: liveE2e ? '1' : '0',
     FINAGENT_E2E_HIDDEN: visible ? '0' : '1',
     FINAGENT_E2E_VISIBLE: visible ? '1' : '0',
     FINAGENT_USER_DATA_DIR: userDataDir,
   };
 }
 
-export function spawnElectron({ appRoot, repoRoot, port, userDataDir, logPath, visible = false, agentProvider = 'local' }) {
+export function spawnElectron({ appRoot, repoRoot, port, userDataDir, logPath, visible = false, agentProvider = 'local', liveE2e = false }) {
   const electronBinary = resolveElectronBinary(appRoot, repoRoot);
   const electronMain = join(appRoot, 'src/main/index.js');
   const log = createWriteStream(logPath, { flags: 'w' });
@@ -98,7 +100,7 @@ export function spawnElectron({ appRoot, repoRoot, port, userDataDir, logPath, v
   const proc = require('node:child_process').spawn(electronBinary, args, {
     cwd: repoRoot,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: buildElectronEnvironment({ userDataDir, agentProvider, visible }),
+    env: buildElectronEnvironment({ userDataDir, agentProvider, visible, liveE2e }),
   });
   proc.stdout.on('data', (chunk) => log.write(chunk));
   proc.stderr.on('data', (chunk) => log.write(chunk));

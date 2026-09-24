@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "test:e2e": "node e2e/run.mjs",
     "test:e2e:business-research": "node e2e/business-research.mjs",
+    "test:e2e:business-research:live": "node e2e/business-research-live.mjs",
     "business-research:live-profile": "node e2e/business-research-live-profile.mjs",
     "test:research-recovery": "node e2e/research-recovery.mjs",
     "test:research-recovery:kernel": "bun e2e/research-recovery-kernel.ts",

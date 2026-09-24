@@ -21,8 +21,8 @@
 | --- | --- | --- |
 | 研究任务 / 策略 | 6 / 3 | 项目内置目录中的唯一任务与策略 ID |
 | 可执行评测案例 | 24/24 通过；0 失败、0 排除 | 固定脚本决策与快照，覆盖研究运行、报告/引用安全、故障恢复和自动触发；不用于推断真实模型泛化能力 |
-| 桌面研究流程 | 2 次持久化运行，各含 2 条 fixture 证据 | 从点击开始到终态报告可见：本次样本 1,511 ms、1,491 ms；仅为本机 fixture 耗时，不是 SLA |
-| 监控集成 | 3 次检查；新来源与来源更新触发 2 次后续研究；重复信号被抑制 | 使用两个固定快照；0 次网络请求；本次检查耗时 52 ms、38 ms、4 ms，不代表真实网站延迟 |
+| 桌面研究流程 | 2 次持久化运行，各含 2 条 fixture 证据 | 从点击开始到终态报告可见：本次样本 1,503 ms、1,496 ms；仅为本机 fixture 耗时，不是 SLA |
+| 监控集成 | 3 次检查；新来源与来源更新触发 2 次后续研究；重复信号被抑制 | 使用两个固定快照；0 次网络请求；本次检查耗时 56 ms、38 ms、4 ms，不代表真实网站延迟 |
 | 重载与报告差异 | 通过 | 重新加载后 run、report、事件和暂停状态仍可读取；第二次同主题运行显示 2 条新证据 |
 
 任务完成、工具选择、引证有效率/事实覆盖、冲突识别、故障恢复、触发精确率/召回率各自的分子、分母与通过阈值，逐项定义在[评测指标与验收口径](docs/superpowers/specs/2026-09-23-market-intelligence-agent-design.md#评测指标统计口径与通过条件)。比例分母为 0 时记为不适用；不得只报百分比而省略样本数。耗时单位为毫秒；评测 p50 是算术中位数，p95 使用 nearest-rank（排序后第 `ceil(0.95 × N)` 个样本）。本次 UI fixture 的两个运行耗时只报告原始值，不作为性能承诺。
@@ -76,7 +76,16 @@ bun run --filter @finagent/electron business-research:live-profile -- prepare "$
 bun run --filter @finagent/electron business-research:live-profile -- open "$liveProfile"
 ```
 
-应用窗口打开后，在设置中配置模型提供方，并在 Market Intelligence 工作区配置 Brave Search。保存后回到终端按 Enter 关闭窗口；此档案会保留在本机供后续验收使用。脚本只会标记空目录或自己已标记的目录，并拒绝仓库内路径和未标记的非空目录。
+应用窗口打开后，按需完成首次启动引导，在设置中配置模型提供方，并在 Market Intelligence 工作区配置 Brave Search。保存后回到终端按 Enter 关闭窗口；此档案会保留在本机供后续验收使用。脚本只会标记空目录或自己已标记的目录，并拒绝仓库内路径和未标记的非空目录。
+
+关闭设置窗口后，在同一 PowerShell 会话中运行真实验收。它会访问 Brave Search 和模型提供方、在专用档案中创建并随后停用一条验收订阅，可能产生供应商用量费用：
+
+```powershell
+$env:FINAGENT_LIVE_E2E_USER_DATA_DIR = $liveProfile
+bun run --filter @finagent/electron test:e2e:business-research:live
+```
+
+通过后会生成脱敏记录 `docs/demos/business-research/live-verification.json`；验收轨迹只保存有效动作、公开来源定位信息、内容哈希与耗时，不保存密钥或网页原文。
 
 ## 项目历史与贡献
 

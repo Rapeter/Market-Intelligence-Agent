@@ -376,6 +376,74 @@ afterEach(() => {
 });
 
 describe('AgentKernelHost', () => {
+  it('rejects live acceptance operations before profile or credential access when opt-in mode is off', async () => {
+    const originalE2e = process.env.FINAGENT_E2E;
+    const originalLiveE2e = process.env.FINAGENT_LIVE_E2E;
+    process.env.FINAGENT_E2E = '0';
+    process.env.FINAGENT_LIVE_E2E = '1';
+    const host = new AgentKernelHost();
+    const probe = Reflect.get(host, 'businessResearchRunLiveCounterfactualProbes') as ((input: unknown) => Promise<unknown>) | undefined;
+    const check = Reflect.get(host, 'businessResearchCheckSubscriptionNow') as ((input: unknown) => Promise<unknown>) | undefined;
+    try {
+      expect(typeof probe).toBe('function');
+      expect(typeof check).toBe('function');
+      if (probe === undefined || check === undefined) return;
+      await expect(probe.call(host, {})).rejects.toMatchObject({ code: 'BUSINESS_RESEARCH_LIVE_E2E_DISABLED' });
+      await expect(check.call(host, {})).rejects.toMatchObject({ code: 'BUSINESS_RESEARCH_LIVE_E2E_DISABLED' });
+    } finally {
+      await host.dispose();
+      if (originalE2e === undefined) delete process.env.FINAGENT_E2E;
+      else process.env.FINAGENT_E2E = originalE2e;
+      if (originalLiveE2e === undefined) delete process.env.FINAGENT_LIVE_E2E;
+      else process.env.FINAGENT_LIVE_E2E = originalLiveE2e;
+    }
+  });
+
+  it('returns the persisted report id for a live monitor acceptance run', async () => {
+    const host = new AgentKernelHost();
+    const subscriptionId = 'subscription-live-e2e';
+    const runId = 'run-live-e2e';
+    const reportId = 'report-live-e2e';
+    Reflect.set(host, 'assertBusinessResearchLiveE2eEnabled', () => undefined);
+    Reflect.set(host, 'businessResearchCredentialStatus', async () => ({ configured: true, updatedAt: null }));
+    Reflect.set(host, 'businessResearchRepository', {
+      getSubscription: async () => ({ id: subscriptionId, enabled: true }),
+      saveSubscription: async () => undefined,
+    });
+    Reflect.set(host, 'businessResearchScheduler', {
+      checkDue: async () => [{
+        id: 'check-live-e2e',
+        subscriptionId,
+        decision: { kind: 'trigger', reason: 'new_source', url: 'https://public.example/update', fingerprint: 'fingerprint' },
+        runId,
+        startedAt: 1,
+        completedAt: 2,
+      }],
+      dispose: () => undefined,
+    });
+    Reflect.set(host, 'businessResearchService', {
+      waitForRun: async () => ({ id: runId, mode: 'live', state: { status: 'completed' }, reportId }),
+      dispose: async () => undefined,
+    });
+    const checkNow = Reflect.get(host, 'businessResearchCheckSubscriptionNow') as ((input: unknown) => Promise<unknown>) | undefined;
+    try {
+      expect(typeof checkNow).toBe('function');
+      if (checkNow === undefined) return;
+      const result = await checkNow.call(host, { subscriptionId });
+      expect(result).toMatchObject({
+        followUpRun: {
+          id: runId,
+          mode: 'live',
+          status: 'completed',
+          reportId,
+          failureCode: null,
+        },
+      });
+    } finally {
+      await host.dispose();
+    }
+  });
+
   it('accepts only fixture/live business research modes and preserves fixture mode on the run record', async () => {
     const host = new AgentKernelHost();
     const task = {

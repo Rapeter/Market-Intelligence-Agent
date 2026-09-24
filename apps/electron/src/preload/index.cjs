@@ -52,6 +52,21 @@ function createBusinessResearchBridge(invoke) {
   };
 }
 
+// src/preload/businessResearchLiveE2eBridge.ts
+function createBusinessResearchLiveE2eBridge(invoke, enabled) {
+  if (!enabled)
+    return;
+  return {
+    runCounterfactualProbes: (input) => invoke("businessResearch:e2e:counterfactualProbes", input),
+    checkSubscriptionNow: (input) => invoke("businessResearch:e2e:checkSubscriptionNow", input)
+  };
+}
+
+// src/businessResearchLiveE2eMode.ts
+function isBusinessResearchLiveE2eEnabled(config) {
+  return !config.isPackaged && config.e2e === "1" && config.liveE2e === "1";
+}
+
 // src/preload/index.ts
 var electronAPI = {
   window: {
@@ -127,6 +142,11 @@ var electronAPI = {
     getDiff: (input) => import_electron.ipcRenderer.invoke("research:getDiff", input)
   },
   businessResearch: createBusinessResearchBridge((channel, ...args) => import_electron.ipcRenderer.invoke(channel, ...args)),
+  businessResearchLiveE2e: createBusinessResearchLiveE2eBridge((channel, input) => import_electron.ipcRenderer.invoke(channel, input), isBusinessResearchLiveE2eEnabled({
+    isPackaged: process.env.FINAGENT_PACKAGED === "1",
+    e2e: process.env.FINAGENT_E2E,
+    liveE2e: process.env.FINAGENT_LIVE_E2E
+  })),
   thesis: {
     list: (symbol) => import_electron.ipcRenderer.invoke("thesis:list", symbol),
     getReport: (symbol) => import_electron.ipcRenderer.invoke("thesis:getReport", symbol),

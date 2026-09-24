@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { AgentKernelHost, toIpcResult } from './kernelHost.ts';
+import { isBusinessResearchLiveE2eEnabled } from '../businessResearchLiveE2eMode.ts';
 import { registerAboutIpc } from './about.ts';
 import { writeSupportBundle } from '@finagent/shared/diagnostics';
 import { loadFinagentEnv } from './loadEnv.ts';
@@ -272,6 +273,19 @@ ipcMain.handle('businessResearch:listChecks', async (_event, input: unknown) =>
 ipcMain.handle('businessResearch:checkDue', async () =>
   toIpcResult(() => agentKernelHost.businessResearchCheckDue())
 );
+
+if (isBusinessResearchLiveE2eEnabled({
+  isPackaged: app.isPackaged,
+  e2e: process.env.FINAGENT_E2E,
+  liveE2e: process.env.FINAGENT_LIVE_E2E,
+})) {
+  ipcMain.handle('businessResearch:e2e:counterfactualProbes', async (_event, input: unknown) =>
+    toIpcResult(() => agentKernelHost.businessResearchRunLiveCounterfactualProbes(input))
+  );
+  ipcMain.handle('businessResearch:e2e:checkSubscriptionNow', async (_event, input: unknown) =>
+    toIpcResult(() => agentKernelHost.businessResearchCheckSubscriptionNow(input))
+  );
+}
 
 ipcMain.handle('thesis:list', async (_event, symbol?: unknown) =>
   toIpcResult(() => agentKernelHost.thesisList(symbol))

@@ -1,5 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { createBusinessResearchBridge, type BusinessResearchBridgeApi } from './businessResearchBridge.ts';
+import {
+  createBusinessResearchLiveE2eBridge,
+  type BusinessResearchLiveE2eBridgeApi,
+} from './businessResearchLiveE2eBridge.ts';
+import { isBusinessResearchLiveE2eEnabled } from '../businessResearchLiveE2eMode.ts';
 
 interface ProviderSettingsInput {
   apiKey?: string;
@@ -69,6 +74,7 @@ export interface ElectronAPI {
     getDiff: (input: { symbol: string }) => Promise<unknown>;
   };
   businessResearch: BusinessResearchBridgeApi;
+  businessResearchLiveE2e?: BusinessResearchLiveE2eBridgeApi;
   thesis: {
     list: (symbol?: string) => Promise<unknown>;
     getReport: (symbol: string) => Promise<unknown>;
@@ -273,6 +279,14 @@ const electronAPI: ElectronAPI = {
     getDiff: (input: { symbol: string }) => ipcRenderer.invoke('research:getDiff', input),
   },
   businessResearch: createBusinessResearchBridge((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
+  businessResearchLiveE2e: createBusinessResearchLiveE2eBridge(
+    (channel, input) => ipcRenderer.invoke(channel, input),
+    isBusinessResearchLiveE2eEnabled({
+      isPackaged: process.env.FINAGENT_PACKAGED === '1',
+      e2e: process.env.FINAGENT_E2E,
+      liveE2e: process.env.FINAGENT_LIVE_E2E,
+    }),
+  ),
   thesis: {
     list: (symbol?: string) => ipcRenderer.invoke('thesis:list', symbol),
     getReport: (symbol: string) => ipcRenderer.invoke('thesis:getReport', symbol),

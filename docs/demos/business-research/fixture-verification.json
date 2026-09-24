@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
   "verificationMode": "deterministic-fixture-only",
-  "generatedAt": "2026-09-24T06:34:15.885Z",
+  "generatedAt": "2026-09-24T07:23:29.382Z",
   "electronUi": {
     "fixtureRunCount": 2,
     "fixtureEvaluation": {
       "passed": 24,
       "total": 24
     },
-    "firstRunElapsedMs": 1511,
-    "secondRunElapsedMs": 1491,
+    "firstRunElapsedMs": 1503,
+    "secondRunElapsedMs": 1496,
     "evidenceRecordsPerRun": 2,
     "citationGrade": "fixture_data",
     "reloadPersistence": true,
@@ -31,7 +31,7 @@
     "checksPersisted": 3,
     "duplicateSuppressed": true,
     "elapsedMs": [
-      52,
+      56,
       38,
       4
     ],
@@ -43,7 +43,7 @@
         "reason": "new_source",
         "runMode": "fixture",
         "runId": "run-monitor-check-1",
-        "elapsedMs": 52
+        "elapsedMs": 56
       },
       {
         "snapshotId": "northstar-update-v2",

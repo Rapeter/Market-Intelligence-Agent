@@ -21,8 +21,8 @@ The following results come from deterministic local fixtures. They are not live-
 | --- | --- | --- |
 | Research tasks / strategies | 6 / 3 | Unique task and strategy IDs in the project catalog |
 | Executable evaluation cases | 24/24 passed; 0 failed, 0 excluded | Fixed scripted decisions and snapshots covering research runs, report/citation safety, recovery, and automatic triggers; not an estimate of real-model generalization |
-| Desktop research flow | 2 persisted runs, each with 2 fixture evidence records | Click-to-terminal-report-visible: 1,511 ms and 1,491 ms in this sample; local fixture timings, not an SLA |
-| Monitor integration | 3 checks; new-source and changed-source signals triggered 2 follow-up runs; duplicate signal suppressed | Two fixed snapshots; 0 network requests; check timings 52 ms, 38 ms, and 4 ms in this sample, not real-site latency |
+| Desktop research flow | 2 persisted runs, each with 2 fixture evidence records | Click-to-terminal-report-visible: 1,503 ms and 1,496 ms in this sample; local fixture timings, not an SLA |
+| Monitor integration | 3 checks; new-source and changed-source signals triggered 2 follow-up runs; duplicate signal suppressed | Two fixed snapshots; 0 network requests; check timings 56 ms, 38 ms, and 4 ms in this sample, not real-site latency |
 | Reload and report diff | Passed | Run, report, events, and paused state remained available after reload; the second same-topic run showed 2 new evidence records |
 
 The numerator, denominator, and acceptance threshold for task completion, tool selection, citation validity/factual coverage, conflict detection, recovery, and trigger precision/recall are defined individually in [Evaluation Metrics and Counting Rules](docs/superpowers/specs/2026-09-23-market-intelligence-agent-design.md#评测指标统计口径与通过条件). A zero denominator is not applicable; sample counts must not be omitted in favor of percentages alone. Latencies are in milliseconds. Evaluation p50 is the arithmetic median; p95 uses nearest rank (the sorted sample at `ceil(0.95 × N)`). The two UI fixture timings are reported as raw observations, not a performance promise.
@@ -76,7 +76,16 @@ bun run --filter @finagent/electron business-research:live-profile -- prepare "$
 bun run --filter @finagent/electron business-research:live-profile -- open "$liveProfile"
 ```
 
-When the window opens, configure a model provider in Settings and Brave Search in the Market Intelligence workspace. Return to the terminal and press Enter to close the window after saving; this profile remains on the local machine for later acceptance runs. The script marks only an empty directory or one it has already marked, and refuses repository paths and unmarked non-empty directories.
+When the window opens, complete first-run onboarding if needed, configure a model provider in Settings and Brave Search in the Market Intelligence workspace. Return to the terminal and press Enter to close the window after saving; this profile remains on the local machine for later acceptance runs. The script marks only an empty directory or one it has already marked, and refuses repository paths and unmarked non-empty directories.
+
+After closing the setup window, run live acceptance in the same PowerShell session. It accesses Brave Search and the configured model provider, creates and then disables one acceptance subscription in the dedicated profile, and may incur provider usage charges:
+
+```powershell
+$env:FINAGENT_LIVE_E2E_USER_DATA_DIR = $liveProfile
+bun run --filter @finagent/electron test:e2e:business-research:live
+```
+
+On success, the run writes the redacted record `docs/demos/business-research/live-verification.json`. Its traces retain validated actions, public-source location metadata, content hashes, and elapsed times, not credentials or raw page text.
 
 ## Project History and Contributions
 
