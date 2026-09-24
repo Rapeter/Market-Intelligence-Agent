@@ -73,7 +73,7 @@ Real-model and public-search acceptance use a separate local profile. Do not put
 ```powershell
 $liveProfile = Join-Path $env:LOCALAPPDATA 'Market-Intelligence-Agent\live-e2e'
 bun run --filter @finagent/electron business-research:live-profile -- prepare "$liveProfile"
-bun run --filter @finagent/electron business-research:live-profile -- open "$liveProfile"
+node apps/electron/e2e/business-research-live-profile.mjs open "$liveProfile"
 ```
 
 When the window opens, complete first-run onboarding if needed, configure a model provider in Settings and Brave Search in the Market Intelligence workspace. Return to the terminal and press Enter to close the window after saving; this profile remains on the local machine for later acceptance runs. The script marks only an empty directory or one it has already marked, and refuses repository paths and unmarked non-empty directories.

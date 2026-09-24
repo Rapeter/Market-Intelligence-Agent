@@ -73,7 +73,7 @@ bun run --filter @finagent/electron test:e2e:business-research
 ```powershell
 $liveProfile = Join-Path $env:LOCALAPPDATA 'Market-Intelligence-Agent\live-e2e'
 bun run --filter @finagent/electron business-research:live-profile -- prepare "$liveProfile"
-bun run --filter @finagent/electron business-research:live-profile -- open "$liveProfile"
+node apps/electron/e2e/business-research-live-profile.mjs open "$liveProfile"
 ```
 
 应用窗口打开后，按需完成首次启动引导，在设置中配置模型提供方，并在 Market Intelligence 工作区配置 Brave Search。保存后回到终端按 Enter 关闭窗口；此档案会保留在本机供后续验收使用。脚本只会标记空目录或自己已标记的目录，并拒绝仓库内路径和未标记的非空目录。
