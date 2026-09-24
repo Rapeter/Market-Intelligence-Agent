@@ -37,6 +37,7 @@ export class BusinessResearchScheduler {
   private readonly now: () => number;
   private readonly idFactory: (kind: BusinessResearchIdKind, sequence: number) => string;
   private readonly inFlight = new Map<BusinessResearchSubscriptionId, Promise<BusinessResearchCheckRecord | undefined>>();
+  private readonly probeControllers = new Set<AbortController>();
   private sequence = 0;
   private timer?: ReturnType<typeof setInterval>;
 
@@ -65,6 +66,12 @@ export class BusinessResearchScheduler {
   stop(): void {
     if (this.timer !== undefined) clearInterval(this.timer);
     this.timer = undefined;
+    for (const controller of this.probeControllers) controller.abort();
+  }
+
+  async dispose(): Promise<void> {
+    this.stop();
+    await Promise.allSettled([...this.inFlight.values()]);
   }
 
   async checkDue(): Promise<BusinessResearchCheckRecord[]> {
@@ -96,6 +103,7 @@ export class BusinessResearchScheduler {
     if (subscription === undefined || !subscription.enabled || subscription.nextCheckAt > startedAt) return undefined;
 
     const abortController = new AbortController();
+    this.probeControllers.add(abortController);
     let sources: BusinessResearchMonitorSourceSnapshot[] = [];
     let probeSucceeded = false;
     try {
@@ -107,7 +115,10 @@ export class BusinessResearchScheduler {
       probeSucceeded = true;
     } catch {
       // Persist a coarse failure reason only; do not serialize remote error bodies.
+    } finally {
+      this.probeControllers.delete(abortController);
     }
+    if (abortController.signal.aborted) return undefined;
 
     const previousSources = await this.repository.getMonitorSources(subscriptionId);
     let decision: BusinessResearchMonitorSignalDecision = probeSucceeded

@@ -295,6 +295,42 @@ describe('BusinessResearchService', () => {
     });
   });
 
+  it('aborts and settles active runs when the host is disposed', async () => {
+    const repository = new BusinessResearchRepository(tempStore());
+    const toolEntered = deferred();
+    let modelCalls = 0;
+    const service = new BusinessResearchService(repository, {
+      createDecisionModel: () => ({
+        async decide() {
+          modelCalls += 1;
+          return { kind: 'search_web', query: 'public update', taskId: 'competitor_products' };
+        },
+      }),
+      createTools: () => ({
+        searchWeb() {
+          toolEntered.resolve();
+          return new Promise<BusinessResearchEvidence[]>(() => {});
+        },
+        async openSource(evidenceId) {
+          return { ...evidence('unused-dispose', 'unused'), id: evidenceId, grade: 'page_text' };
+        },
+      }),
+      async generateReport() { throw new Error('An interrupted run must not synthesize a report.'); },
+      idFactory: (kind, sequence) => `${kind}-dispose-${sequence}`,
+    });
+
+    const started = await service.start(taskInput());
+    await toolEntered.promise;
+    await service.dispose();
+
+    expect((await service.getRun(started.id))?.state.status).toBe('cancelled');
+    expect(modelCalls).toBe(1);
+    expect((await repository.getEvents(started.id)).at(-1)).toMatchObject({
+      type: 'run_terminal',
+      outcome: { status: 'cancelled' },
+    });
+  });
+
   it('keeps cancellation as the terminal reason when report generation is interrupted', async () => {
     const repository = new BusinessResearchRepository(tempStore());
     const synthesisEntered = deferred();

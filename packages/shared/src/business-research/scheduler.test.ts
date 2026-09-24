@@ -98,6 +98,24 @@ describe('BusinessResearchScheduler', () => {
     expect((await app.repository.getSubscription(subscription.id))?.nextCheckAt).toBe(app.clock.now + HOUR);
   });
 
+  it('aborts an in-flight public monitor probe when the scheduler stops', async () => {
+    const entered = deferred();
+    const app = harness(({ signal }) => new Promise((_, reject) => {
+      entered.resolve();
+      signal.addEventListener('abort', () => reject(new Error('probe aborted')), { once: true });
+    }));
+    const subscription = await app.service.subscribe(taskInput(), { intervalMs: HOUR });
+    app.clock.now += HOUR;
+    const pending = app.scheduler.checkDue();
+    await entered.promise;
+
+    await app.scheduler.dispose();
+
+    await expect(pending).resolves.toEqual([]);
+    expect(await app.repository.listChecks(subscription.id)).toEqual([]);
+    expect(await app.service.listRuns()).toEqual([]);
+  });
+
   it('triggers for material updates to a known page but never reruns a previously reserved fingerprint', async () => {
     let current = source('body-v2');
     const app = harness(async () => [current]);

@@ -13,3 +13,4 @@ export * from './evaluation/metrics.ts';
 export * from './repository.ts';
 export * from './service.ts';
 export * from './scheduler.ts';
+export * from './pi-adapter.ts';

@@ -111,6 +111,18 @@ export class BusinessResearchService {
     return this.repository.getRun(runId);
   }
 
+  async listEvents(runId: BusinessResearchRunId): Promise<BusinessResearchEvent[]> {
+    await this.ensureRecovered();
+    return this.repository.getEvents(runId);
+  }
+
+  /** Stop all active work before the owning application shuts down. */
+  async dispose(): Promise<void> {
+    const active = [...this.activeRuns.values()];
+    for (const run of active) run.controller.abort();
+    await Promise.allSettled(active.map((run) => run.promise));
+  }
+
   async getRun(runId: BusinessResearchRunId): Promise<BusinessResearchRunRecord | undefined> {
     await this.ensureRecovered();
     return this.repository.getRun(runId);

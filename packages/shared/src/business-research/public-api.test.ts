@@ -3,6 +3,7 @@ import {
   BusinessResearchRepository,
   BusinessResearchScheduler,
   BusinessResearchService,
+  createPiBusinessResearchAdapter,
   runBusinessResearch,
 } from './index.ts';
 
@@ -12,5 +13,6 @@ describe('business research public barrel', () => {
     expect(BusinessResearchRepository).toBeFunction();
     expect(BusinessResearchService).toBeFunction();
     expect(BusinessResearchScheduler).toBeFunction();
+    expect(createPiBusinessResearchAdapter).toBeFunction();
   });
 });
