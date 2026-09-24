@@ -5,10 +5,10 @@
 //
 //   bun run test:package-smoke
 //
-// Prerequisite: `bun run package` must have produced dist/electron/mac*/Folio.app.
+// Prerequisite: `bun run package` must have produced the configured product app bundle.
 
 import { execSync, spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,6 +19,8 @@ const { chromium } = require('playwright-core');
 
 const here = dirname(fileURLToPath(import.meta.url));
 const appRoot = join(here, '..');
+const packageMetadata = JSON.parse(readFileSync(join(appRoot, 'package.json'), 'utf8'));
+const productName = packageMetadata.build.productName;
 const repoRoot = join(here, '../../..');
 const distDir = join(repoRoot, 'dist', 'electron');
 
@@ -57,12 +59,12 @@ function findAppBinary() {
   }
   for (const entry of readdirSync(distDir)) {
     if (!entry.startsWith('mac')) continue;
-    const candidate = join(distDir, entry, 'Folio.app', 'Contents', 'MacOS', 'Folio');
+    const candidate = join(distDir, entry, `${productName}.app`, 'Contents', 'MacOS', productName);
     if (existsSync(candidate) && statSync(candidate).isFile()) {
       return candidate;
     }
   }
-  throw new Error(`No Folio.app binary found under ${distDir}/mac*.`);
+  throw new Error(`No ${productName}.app binary found under ${distDir}/mac*.`);
 }
 
 async function waitForPage(context, timeoutMs) {

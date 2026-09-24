@@ -14,7 +14,7 @@
 // (no provider connected → wizard gate opens).
 
 import { execSync, spawn } from 'node:child_process';
-import { existsSync, rmSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -25,10 +25,18 @@ const { chromium } = require('playwright-core');
 const here = dirname(fileURLToPath(import.meta.url));
 const appRoot = join(here, '..');
 const repoRoot = join(here, '../../..');
-const packagedBinary = join(
-  repoRoot,
-  'dist/electron/mac-arm64/Folio.app/Contents/MacOS/Folio'
-);
+const packageMetadata = JSON.parse(readFileSync(join(appRoot, 'package.json'), 'utf8'));
+const productName = packageMetadata.build.productName;
+const packagedBinary = (() => {
+  const distDir = join(repoRoot, 'dist', 'electron');
+  if (!existsSync(distDir)) return join(distDir, 'mac-arm64', `${productName}.app`, 'Contents', 'MacOS', productName);
+  for (const entry of readdirSync(distDir)) {
+    if (!entry.startsWith('mac')) continue;
+    const candidate = join(distDir, entry, `${productName}.app`, 'Contents', 'MacOS', productName);
+    if (existsSync(candidate)) return candidate;
+  }
+  return join(distDir, 'mac-arm64', `${productName}.app`, 'Contents', 'MacOS', productName);
+})();
 const CDP_PORT = 9347;
 const userDataDir = join(appRoot, 'e2e/.user-data-fresh');
 
