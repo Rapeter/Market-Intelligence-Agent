@@ -4,7 +4,7 @@
 //   bun run release:check
 //
 // Enforces the hard release gates from docs/release-gates.md in order:
-//   1. unit/integration tests (`bun test`)
+//   1. unit/integration tests (`bun run test:unit`)
 //   2. typecheck (`bun run typecheck`)
 //   3. build (`bun run build`)
 //   4. electron e2e golden path, local provider (FINAGENT_AGENT_PROVIDER=local)
@@ -25,7 +25,7 @@ const GATES = [
   {
     name: 'unit/integration tests',
     command: 'bun',
-    args: ['test'],
+    args: ['run', 'test:unit'],
     cwd: repoRoot,
   },
   {
