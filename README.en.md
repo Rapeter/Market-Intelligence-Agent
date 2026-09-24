@@ -17,15 +17,24 @@ The system uses publicly accessible information only. Extracted dates, products,
 
 The following results come from deterministic local fixtures. They are not live-model accuracy or market findings.
 
-| Metric | Result | Counting rule |
+| Metric | Observed result | Counting rule and acceptance |
 | --- | --- | --- |
-| Research tasks / strategies | 6 / 3 | Unique task and strategy IDs in the project catalog |
-| Executable evaluation cases | 24/24 passed; 0 failed, 0 excluded | Fixed scripted decisions and snapshots covering research runs, report/citation safety, recovery, and automatic triggers; not an estimate of real-model generalization |
-| Desktop research flow | 2 persisted runs, each with 2 fixture evidence records | Click-to-terminal-report-visible: 1,503 ms and 1,496 ms in this sample; local fixture timings, not an SLA |
-| Monitor integration | 3 checks; new-source and changed-source signals triggered 2 follow-up runs; duplicate signal suppressed | Two fixed snapshots; 0 network requests; check timings 56 ms, 38 ms, and 4 ms in this sample, not real-site latency |
-| Reload and report diff | Passed | Run, report, events, and paused state remained available after reload; the second same-topic run showed 2 new evidence records |
+| Research tasks / strategies | 6 / 3 | Unique task IDs / strategy IDs in this project's catalog |
+| Executable evaluation cases | 24/24 passed; 0 failed, 0 excluded | Fixed scripted decisions and snapshots; full target requires 24/24 expected outcomes |
+| Research runs | 22/22 started, 0 unstarted; 17 completed, 4 partial, 1 failed, 0 cancelled | The 24 cases expect 22 runs; statuses are reported separately and an unstarted expected run is a case failure |
+| Normal-task completion | 6/6 (100%) | Normal cases completed with required sections and at least one valid citation / 6; threshold 6/6 |
+| Expected outcome accuracy | 24/24 (100%) | Cases matching the annotated run terminal state or monitor trigger/skip outcome / 24; threshold 24/24 |
+| Tool-selection accuracy | 58/58 (100%) | Decisions whose action and arguments are in the annotated allowed set / all annotated decision points; fixture threshold 100%; live counterfactual acceptance is pending configuration |
+| Citation validity / factual claim coverage | 17/17 (100%) / 14/14 (100%) | Valid citations supporting their claims / all citations; factual claims with valid evidence / all factual claims; both fixture thresholds are 100% |
+| Conflict detection / recovery | 3/3 (100%) / 3/3 (100%) | Expected conflicts detected / conflict cases; recovery outcomes matching retry, partial, or explicit-failure expectation / 3; both thresholds are 3/3 |
+| Automatic-trigger precision / recall | 2/2 (100%) / 2/2 (100%) | Correct triggers / all triggers; correct triggers / two expected-trigger cases; both thresholds are 2/2 and duplicate signals must not retrigger |
+| Evaluation run latency | 22 samples; p50 16 ms, p95 21 ms, max 28 ms | Start-to-terminal samples under a controlled fixture clock; p50 is arithmetic median, p95 is nearest rank; thresholds: p95 ≤30,000 ms and max ≤60,000 ms |
+| Evaluation tool latency | 38 samples; p95 5 ms | Nearest-rank p95 over fixture tool calls; not a measure of live network latency |
+| Desktop research flow | 2 persisted runs, each with 2 fixture evidence records | Windows Electron UI click-to-report-visible timings are recorded in the machine artifact; one local sample, not a performance promise |
+| Monitor integration | 3 checks, 2 follow-up runs; duplicate signal suppressed | Two fixed snapshots; 0 network requests; sample timings are in the machine artifact and are not real-site latency |
+| Reload and report diff | Passed | Runs, reports, events, and paused state remained available after reload; the second same-topic run showed 2 new evidence records |
 
-The numerator, denominator, and acceptance threshold for task completion, tool selection, citation validity/factual coverage, conflict detection, recovery, and trigger precision/recall are defined individually in [Evaluation Metrics and Counting Rules](docs/superpowers/specs/2026-09-23-market-intelligence-agent-design.md#评测指标统计口径与通过条件). A zero denominator is not applicable; sample counts must not be omitted in favor of percentages alone. Latencies are in milliseconds. Evaluation p50 is the arithmetic median; p95 uses nearest rank (the sorted sample at `ceil(0.95 × N)`). The two UI fixture timings are reported as raw observations, not a performance promise.
+A zero denominator is not applicable, never 100%; percentages must not replace counts or hide failed samples. The fixed evaluation uses the scripted fixture model and source snapshots; it does not call a model provider or Brave Search. Per-case outcomes, numerators/denominators, sample counts, fixture model/source versions, evaluation time, and the Windows platform are recorded in the [machine-readable acceptance artifact](docs/demos/business-research/fixture-verification.json). Live counterfactual acceptance requires both evidence-different pairs to produce valid divergent next decisions with zero invalid tool calls. Live public-source monitoring requires an actual follow-up research run. Both remain pending configuration and cannot be replaced by fixture results.
 
 Real-model same-topic counterfactual decisions (different evidence producing a different next tool choice) and change-triggering from a real public search source have not yet passed acceptance. They require configured model and Brave Search credentials and must be run separately; fixture results do not substitute for them.
 

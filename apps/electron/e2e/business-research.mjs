@@ -202,7 +202,9 @@ try {
   const report = {
     schemaVersion: 1,
     verificationMode: 'deterministic-fixture-only',
+    verificationPlatform: process.platform,
     generatedAt: new Date().toISOString(),
+    evaluationMetrics: evaluation,
     electronUi: {
       fixtureRunCount: 2,
       fixtureEvaluation: { passed: evaluation.cases.passed, total: evaluation.cases.total },
@@ -219,8 +221,13 @@ try {
     liveModelCounterfactuals: 'not verified by this fixture-only run',
     livePublicChangeTrigger: 'not verified by this fixture-only run',
   };
-  const { writeFile } = await import('node:fs/promises');
-  await writeFile(join(artifactDirectory, 'fixture-verification.json'), JSON.stringify(report, null, 2) + '\n', 'utf8');
+  assert.ok(report.evaluationMetrics, 'Fixture verification artifact must include the complete evaluation metrics.');
+  const artifactPath = join(artifactDirectory, 'fixture-verification.json');
+  const { readFile, writeFile } = await import('node:fs/promises');
+  await writeFile(artifactPath, JSON.stringify(report, null, 2) + '\n', 'utf8');
+  const persistedReport = JSON.parse(await readFile(artifactPath, 'utf8'));
+  assert.deepEqual(persistedReport.evaluationMetrics, evaluation, 'Persisted metric report must match the measured evaluation result.');
+  assert.equal(persistedReport.verificationPlatform, process.platform);
   console.log(`PASS business-research Electron fixture flow: 2 persisted UI runs, ${evaluation.cases.passed}/${evaluation.cases.total} fixture cases, reload/diff/monitor pause verified.`);
   console.log(`TIMING fixture-ui-runs-ms=${JSON.stringify(timings.map((item) => item.elapsedMs))}`);
 } catch (error) {

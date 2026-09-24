@@ -1,15 +1,258 @@
 {
   "schemaVersion": 1,
   "verificationMode": "deterministic-fixture-only",
-  "generatedAt": "2026-09-24T08:24:56.750Z",
+  "verificationPlatform": "win32",
+  "generatedAt": "2026-09-24T08:47:03.000Z",
+  "evaluationMetrics": {
+    "metadata": {
+      "mode": "fixture",
+      "corpusVersion": 1,
+      "modelVersion": "scripted-fixture-v1",
+      "sourceVersion": "fixed-public-snapshot-v1",
+      "evaluatedAt": "2026-09-24T08:46:59.146Z"
+    },
+    "cases": {
+      "total": 24,
+      "passed": 24,
+      "failed": 0,
+      "excluded": 0
+    },
+    "caseResults": [
+      {
+        "id": "BR-EVAL-01",
+        "passed": true,
+        "actualOutcome": "completed/accepted",
+        "expectedOutcome": "completed/accepted"
+      },
+      {
+        "id": "BR-EVAL-02",
+        "passed": true,
+        "actualOutcome": "completed/accepted",
+        "expectedOutcome": "completed/accepted"
+      },
+      {
+        "id": "BR-EVAL-03",
+        "passed": true,
+        "actualOutcome": "completed/accepted",
+        "expectedOutcome": "completed/accepted"
+      },
+      {
+        "id": "BR-EVAL-04",
+        "passed": true,
+        "actualOutcome": "completed/accepted",
+        "expectedOutcome": "completed/accepted"
+      },
+      {
+        "id": "BR-EVAL-05",
+        "passed": true,
+        "actualOutcome": "completed/accepted",
+        "expectedOutcome": "completed/accepted"
+      },
+      {
+        "id": "BR-EVAL-06",
+        "passed": true,
+        "actualOutcome": "completed/accepted",
+        "expectedOutcome": "completed/accepted"
+      },
+      {
+        "id": "BR-EVAL-07",
+        "passed": true,
+        "actualOutcome": "partial/accepted",
+        "expectedOutcome": "partial/accepted"
+      },
+      {
+        "id": "BR-EVAL-08",
+        "passed": true,
+        "actualOutcome": "partial/accepted",
+        "expectedOutcome": "partial/accepted"
+      },
+      {
+        "id": "BR-EVAL-09",
+        "passed": true,
+        "actualOutcome": "partial/accepted",
+        "expectedOutcome": "partial/accepted"
+      },
+      {
+        "id": "BR-EVAL-10",
+        "passed": true,
+        "actualOutcome": "completed/accepted",
+        "expectedOutcome": "completed/accepted"
+      },
+      {
+        "id": "BR-EVAL-11",
+        "passed": true,
+        "actualOutcome": "completed/accepted",
+        "expectedOutcome": "completed/accepted"
+      },
+      {
+        "id": "BR-EVAL-12",
+        "passed": true,
+        "actualOutcome": "completed/accepted",
+        "expectedOutcome": "completed/accepted"
+      },
+      {
+        "id": "BR-EVAL-13",
+        "passed": true,
+        "actualOutcome": "completed/accepted",
+        "expectedOutcome": "completed/accepted"
+      },
+      {
+        "id": "BR-EVAL-14",
+        "passed": true,
+        "actualOutcome": "completed/accepted",
+        "expectedOutcome": "completed/accepted"
+      },
+      {
+        "id": "BR-EVAL-15",
+        "passed": true,
+        "actualOutcome": "partial/accepted",
+        "expectedOutcome": "partial/accepted"
+      },
+      {
+        "id": "BR-EVAL-16",
+        "passed": true,
+        "actualOutcome": "failed/not_attempted",
+        "expectedOutcome": "failed/not_attempted"
+      },
+      {
+        "id": "BR-EVAL-17",
+        "passed": true,
+        "actualOutcome": "completed/accepted",
+        "expectedOutcome": "completed/accepted"
+      },
+      {
+        "id": "BR-EVAL-18",
+        "passed": true,
+        "actualOutcome": "completed/rejected",
+        "expectedOutcome": "completed/rejected"
+      },
+      {
+        "id": "BR-EVAL-19",
+        "passed": true,
+        "actualOutcome": "completed/rejected",
+        "expectedOutcome": "completed/rejected"
+      },
+      {
+        "id": "BR-EVAL-20",
+        "passed": true,
+        "actualOutcome": "completed/accepted",
+        "expectedOutcome": "completed/accepted"
+      },
+      {
+        "id": "BR-EVAL-21",
+        "passed": true,
+        "actualOutcome": "trigger/new_source",
+        "expectedOutcome": "trigger/new_source"
+      },
+      {
+        "id": "BR-EVAL-22",
+        "passed": true,
+        "actualOutcome": "trigger/source_updated",
+        "expectedOutcome": "trigger/source_updated"
+      },
+      {
+        "id": "BR-EVAL-23",
+        "passed": true,
+        "actualOutcome": "skip/no_change",
+        "expectedOutcome": "skip/no_change"
+      },
+      {
+        "id": "BR-EVAL-24",
+        "passed": true,
+        "actualOutcome": "skip/unrelated",
+        "expectedOutcome": "skip/unrelated"
+      }
+    ],
+    "researchRuns": {
+      "expected": 22,
+      "actual": 22,
+      "unstarted": 0,
+      "completed": 17,
+      "partial": 4,
+      "failed": 1,
+      "cancelled": 0
+    },
+    "monitoringChecks": {
+      "total": 4,
+      "triggered": 2,
+      "notTriggered": 2,
+      "duplicateSignals": 0
+    },
+    "reports": {
+      "accepted": 19,
+      "rejected": 2,
+      "notAttempted": 1
+    },
+    "taskCompletion": {
+      "numerator": 6,
+      "denominator": 6,
+      "rate": 1
+    },
+    "expectedOutcomeAccuracy": {
+      "numerator": 24,
+      "denominator": 24,
+      "rate": 1
+    },
+    "toolSelectionAccuracy": {
+      "numerator": 58,
+      "denominator": 58,
+      "rate": 1
+    },
+    "citations": {
+      "validity": {
+        "numerator": 17,
+        "denominator": 17,
+        "rate": 1
+      },
+      "factualClaimCoverage": {
+        "numerator": 14,
+        "denominator": 14,
+        "rate": 1
+      }
+    },
+    "conflictDetection": {
+      "numerator": 3,
+      "denominator": 3,
+      "rate": 1
+    },
+    "recovery": {
+      "numerator": 3,
+      "denominator": 3,
+      "rate": 1
+    },
+    "automaticTrigger": {
+      "precision": {
+        "numerator": 2,
+        "denominator": 2,
+        "rate": 1
+      },
+      "recall": {
+        "numerator": 2,
+        "denominator": 2,
+        "rate": 1
+      }
+    },
+    "latency": {
+      "run": {
+        "sampleCount": 22,
+        "p50": 16,
+        "p95": 21,
+        "max": 28
+      },
+      "tool": {
+        "sampleCount": 38,
+        "p95": 5
+      }
+    }
+  },
   "electronUi": {
     "fixtureRunCount": 2,
     "fixtureEvaluation": {
       "passed": 24,
       "total": 24
     },
-    "firstRunElapsedMs": 1499,
-    "secondRunElapsedMs": 1520,
+    "firstRunElapsedMs": 1486,
+    "secondRunElapsedMs": 1490,
     "evidenceRecordsPerRun": 2,
     "citationGrade": "fixture_data",
     "reloadPersistence": true,
@@ -31,9 +274,9 @@
     "checksPersisted": 3,
     "duplicateSuppressed": true,
     "elapsedMs": [
-      45,
-      32,
-      3
+      53,
+      40,
+      4
     ],
     "checks": [
       {
@@ -43,7 +286,7 @@
         "reason": "new_source",
         "runMode": "fixture",
         "runId": "run-monitor-check-1",
-        "elapsedMs": 45
+        "elapsedMs": 53
       },
       {
         "snapshotId": "northstar-update-v2",
@@ -52,14 +295,14 @@
         "reason": "source_updated",
         "runMode": "fixture",
         "runId": "run-monitor-check-2",
-        "elapsedMs": 32
+        "elapsedMs": 40
       },
       {
         "snapshotId": "northstar-update-v1",
         "expectedDecision": "not_triggered",
         "decision": "skip",
         "reason": "duplicate_signal",
-        "elapsedMs": 3
+        "elapsedMs": 4
       }
     ]
   },

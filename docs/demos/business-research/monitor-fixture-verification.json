@@ -12,9 +12,9 @@
   "checksPersisted": 3,
   "duplicateSuppressed": true,
   "elapsedMs": [
-    45,
-    32,
-    3
+    53,
+    40,
+    4
   ],
   "checks": [
     {
@@ -24,7 +24,7 @@
       "reason": "new_source",
       "runMode": "fixture",
       "runId": "run-monitor-check-1",
-      "elapsedMs": 45
+      "elapsedMs": 53
     },
     {
       "snapshotId": "northstar-update-v2",
@@ -33,14 +33,14 @@
       "reason": "source_updated",
       "runMode": "fixture",
       "runId": "run-monitor-check-2",
-      "elapsedMs": 32
+      "elapsedMs": 40
     },
     {
       "snapshotId": "northstar-update-v1",
       "expectedDecision": "not_triggered",
       "decision": "skip",
       "reason": "duplicate_signal",
-      "elapsedMs": 3
+      "elapsedMs": 4
     }
   ]
 }
