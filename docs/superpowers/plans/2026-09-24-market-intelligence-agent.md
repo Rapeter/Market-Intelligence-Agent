@@ -96,11 +96,11 @@ export interface BusinessResearchToolPort {
 }
 ```
 
-- [ ] Write failing tests proving the model chooses a different next query after conflicting evidence and chooses `finish` after sufficient evidence.
-- [ ] Implement one-action-per-decision Core validation; reject unknown tools, invalid evidence ids, duplicate no-progress steps, and malformed decisions.
-- [ ] Implement Runtime budgets, cancellation, monotonic event sequence, and explicit `completed` / `partial` / `failed` / `cancelled` transitions.
-- [ ] Implement event replay that reconstructs the same observation state and strips secret-like fields before persistence.
-- [ ] Run focused Core/Runtime tests and shared typecheck; commit and push `feat: add bounded dynamic research loop`.
+- [x] Write failing tests proving the model chooses a different next query after conflicting evidence and chooses `finish` after sufficient evidence.
+- [x] Implement one-action-per-decision Core validation; reject unknown tools, invalid evidence ids, duplicate no-progress steps, and malformed decisions.
+- [x] Implement Runtime budgets, cancellation, monotonic event sequence, and explicit `completed` / `partial` / `failed` / `cancelled` transitions.
+- [x] Implement event replay that reconstructs the same observation state and strips secret-like fields before persistence.
+- [x] Run focused Core/Runtime tests and shared typecheck; commit and push `feat: add bounded dynamic research loop`.
 
 ### Task 4: Add public web search, safe source reading, and citation-grade evidence
 
@@ -110,12 +110,12 @@ export interface BusinessResearchToolPort {
 - Create: `packages/shared/src/business-research/evidence.ts`, `evidence.test.ts`
 - Modify: `apps/electron/src/main/credentialStore.ts` only if a separate Brave credential namespace is needed
 
-- [ ] Check the current official Brave Search API schema before implementing requests; parse status, rate limits, and result URL/title/snippet without trusting remote data.
-- [ ] Add URL allow checks for HTTPS, redirect validation, private/reserved IP rejection after every DNS resolution, bounded response bytes/time, and static text extraction.
-- [ ] Normalize results into evidence ids with query, source URL, retrieval timestamp, source excerpt, and `search_excerpt` / `page_text` grade.
-- [ ] Reject citations whose evidence id is absent or whose case annotation does not support the claim; label extracted public fields with their provenance.
-- [ ] Test malformed responses, duplicate URLs, missing URLs, redirects, private IPs, timeout, oversized pages, and prompt-injection text.
-- [ ] Run focused adapter tests; commit and push `feat: collect safe public web evidence`.
+- [x] Check the current official Brave Search API schema before implementing requests; parse status, rate limits, and result URL/title/snippet without trusting remote data.
+- [x] Add URL allow checks for HTTPS, redirect validation, private/reserved IP rejection after every DNS resolution, bounded response bytes/time, and static text extraction.
+- [x] Normalize results into evidence ids with query, source URL, retrieval timestamp, source excerpt, and `search_excerpt` / `page_text` grade.
+- [x] Preserve public-evidence provenance and permit opening only evidence ids discovered in the current run. Claim-to-case support checks belong with Task 5 synthesis/evaluation, before any claim is rendered as supported.
+- [x] Test malformed responses, duplicate URLs, missing URLs, redirects, private IPs, timeout, oversized pages, and inert HTML/script content.
+- [x] Run focused adapter tests; commit and push `feat: collect safe public web evidence`.
 
 ### Task 5: Build report synthesis, monitoring signals, and the 24-case evaluation corpus
 
@@ -126,7 +126,7 @@ export interface BusinessResearchToolPort {
 
 - [ ] Implement the six task objectives: industry landscape, competitor products, pricing/channels, public feedback signals, policy/technology risk, evidence conflict/change review.
 - [ ] Implement three strategy profiles: industry overview, competitor deep dive, and change/risk tracking; strategies affect priorities and budgets, not a fixed tool order.
-- [ ] Synthesize claims only from persisted evidence and record contrary evidence, unresolved questions, monitoring actions, and source grades.
+- [ ] Synthesize claims only from persisted evidence and record contrary evidence, unresolved questions, monitoring actions, and source grades; reject missing evidence IDs and case-unsupported citations.
 - [ ] Add 24 versioned executable cases in the spec distribution; annotate permitted actions, expected terminal/check outcome, evidence support, and expected trigger behavior.
 - [ ] Implement metric formulas from the spec, including p50 and nearest-rank p95, task completion, terminal/check accuracy, admissible tool selection, citation validity/coverage, recovery, trigger precision/recall, and sample/exclusion counts.
 - [ ] Run all 24 cases through the fixture runtime and assert the design thresholds; commit and push `feat: add enterprise research reports and evaluation corpus`.
