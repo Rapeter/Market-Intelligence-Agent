@@ -32,7 +32,7 @@ export const businessResearchRunsAtom = atom<BusinessResearchRunRecord[]>([]);
 export const businessResearchReportsAtom = atom<BusinessResearchReport[]>([]);
 export const businessResearchEventsAtom = atom<BusinessResearchEvent[]>([]);
 export const businessResearchSubscriptionsAtom = atom<BusinessResearchSubscriptionRecord[]>([]);
-export const businessResearchChecksAtom = atom<BusinessResearchCheckRecord[]>([]);
+export const businessResearchChecksAtom = atom<Record<string, BusinessResearchCheckRecord[]>>({});
 export const businessResearchMetricsAtom = atom<BusinessResearchEvaluationMetrics | null>(null);
 
 export const selectedBusinessResearchRunIdAtom = atom<BusinessResearchRunRecord['id'] | null>(null);

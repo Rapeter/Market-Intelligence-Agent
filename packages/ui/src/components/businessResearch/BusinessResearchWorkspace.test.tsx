@@ -22,6 +22,7 @@ function setup() {
   const calls: Array<{ industry: string; question: string; competitors: string[]; strategyId: string; mode: string }> = [];
   const monitorActions: string[] = [];
   const subscriptions: Array<Record<string, unknown>> = [];
+  const checksBySubscription = new Map<string, Array<Record<string, unknown>>>();
   const runId = parseBusinessResearchId('run', 'run-ui-live')!;
   const reportId = parseBusinessResearchId('report', 'report-ui-live')!;
   const subscriptionId = parseBusinessResearchId('subscription', 'subscription-ui')!;
@@ -153,11 +154,11 @@ function setup() {
       return { ok: true, data: undefined };
     },
     listSubscriptions: async () => ({ ok: true, data: subscriptions }),
-    listChecks: async () => ({ ok: true, data: [] }),
+    listChecks: async (input: string) => ({ ok: true, data: checksBySubscription.get(input) ?? [] }),
     checkDue: async () => { monitorActions.push('probe'); return { ok: true, data: [] }; },
   };
   const client = { ...fallbackClient, businessResearch: api } as unknown as FinagentClient;
-  return { calls, client, monitorActions };
+  return { calls, client, monitorActions, subscriptions, checksBySubscription };
 }
 
 async function renderWorkspace(client: FinagentClient) {
@@ -237,6 +238,59 @@ it('starts an explicitly live run, then renders its selected task facet, evidenc
     expect(evaluation.textContent).toContain('22/24');
     expect(evaluation.textContent).toContain('140 ms');
     expect(evaluation.textContent).toContain('240 ms');
+  } finally {
+    await view.cleanup();
+  }
+});
+
+it('shows each topic’s own latest monitor check and refreshes newly completed checks', async () => {
+  const { client, subscriptions, checksBySubscription } = setup();
+  const firstId = parseBusinessResearchId('subscription', 'subscription-ui-first')!;
+  const secondId = parseBusinessResearchId('subscription', 'subscription-ui-second')!;
+  const firstCheckId = parseBusinessResearchId('event', 'event-ui-monitor-first')!;
+  const secondCheckId = parseBusinessResearchId('event', 'event-ui-monitor-second')!;
+  const monitorTask = (industry: string) => ({
+    industry,
+    question: `Track public changes in ${industry}.`,
+    competitors: ['Northstar', 'Southwind'],
+    strategyId: 'change_risk_tracking',
+  });
+  subscriptions.push(
+    { id: firstId, task: monitorTask('Electric vehicles'), intervalMs: 3_600_000, enabled: true, createdAt: 1, updatedAt: 1, nextCheckAt: 2 },
+    { id: secondId, task: monitorTask('Battery storage'), intervalMs: 3_600_000, enabled: true, createdAt: 1, updatedAt: 1, nextCheckAt: 2 },
+  );
+  checksBySubscription.set(secondId, [{
+    id: secondCheckId,
+    subscriptionId: secondId,
+    startedAt: 1_699_999_999_000,
+    completedAt: 1_700_000_000_000,
+    decision: { kind: 'skip', reason: 'no_change' },
+  }]);
+
+  const view = await renderWorkspace(client);
+  try {
+    const monitorPanel = Array.from(view.container.querySelectorAll('section'))
+      .find((section) => section.querySelector('h2')?.textContent === 'Topic monitoring');
+    const monitorRow = (industry: string) => {
+      const topicButton = Array.from(monitorPanel?.querySelectorAll('button[aria-pressed]') ?? [])
+        .find((button) => button instanceof HTMLButtonElement && button.textContent?.includes(industry));
+      return topicButton?.parentElement?.parentElement;
+    };
+    const firstRow = monitorRow('Electric vehicles');
+    const secondRow = monitorRow('Battery storage');
+    expect(firstRow?.textContent).toContain('No checks yet');
+    expect(secondRow?.textContent).toContain('no change');
+    expect(secondRow?.textContent).not.toContain('No checks yet');
+
+    checksBySubscription.set(firstId, [{
+      id: firstCheckId,
+      subscriptionId: firstId,
+      startedAt: 1_700_000_001_000,
+      completedAt: 1_700_000_002_000,
+      decision: { kind: 'skip', reason: 'duplicate_signal' },
+    }]);
+    await view.click('[aria-label="Refresh records"]');
+    expect(monitorRow('Electric vehicles')?.textContent).toContain('duplicate signal');
   } finally {
     await view.cleanup();
   }

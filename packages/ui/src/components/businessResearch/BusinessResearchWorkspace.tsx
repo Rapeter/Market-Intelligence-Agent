@@ -13,6 +13,7 @@ import {
   type BusinessResearchStrategyId,
 } from '@finagent/core';
 import type {
+  BusinessResearchCheckRecord,
   BusinessResearchEvaluationMetrics,
   BusinessResearchReport,
   BusinessResearchSubscriptionRecord,
@@ -59,8 +60,8 @@ export const BusinessResearchWorkspace: React.FC = () => {
   const setEvents = useSetAtom(businessResearchEventsAtom);
   const subscriptions = useAtomValue(businessResearchSubscriptionsAtom);
   const setSubscriptions = useSetAtom(businessResearchSubscriptionsAtom);
-  const checks = useAtomValue(businessResearchChecksAtom);
-  const setChecks = useSetAtom(businessResearchChecksAtom);
+  const checksBySubscription = useAtomValue(businessResearchChecksAtom);
+  const setChecksBySubscription = useSetAtom(businessResearchChecksAtom);
   const metrics = useAtomValue(businessResearchMetricsAtom);
   const setMetrics = useSetAtom(businessResearchMetricsAtom);
   const selectedRun = useAtomValue(selectedBusinessResearchRunAtom);
@@ -90,6 +91,20 @@ export const BusinessResearchWorkspace: React.FC = () => {
     strategyId: form.strategyId,
   }), [form]);
 
+  const loadSubscriptionChecks = useCallback(async (items: readonly BusinessResearchSubscriptionRecord[]) => {
+    const loaded: Record<string, BusinessResearchCheckRecord[]> = {};
+    if (!api) return loaded;
+    await Promise.all(items.map(async (subscription) => {
+      try {
+        const result = await api.listChecks(subscription.id);
+        if (result.ok) loaded[subscription.id] = result.data;
+      } catch {
+        // Keep the last successfully loaded history visible during transient read failures.
+      }
+    }));
+    return loaded;
+  }, [api]);
+
   const refreshRecords = useCallback(async () => {
     if (!api) throw new Error(t('research.businessResearch.errors.unavailable'));
     const [runResult, reportResult, subscriptionResult, credentialResult] = await Promise.all([
@@ -102,6 +117,8 @@ export const BusinessResearchWorkspace: React.FC = () => {
     setRuns(nextRuns);
     setReports(nextReports);
     setSubscriptions(nextSubscriptions);
+    const nextChecks = await loadSubscriptionChecks(nextSubscriptions);
+    setChecksBySubscription((current) => mergeSubscriptionChecks(current, nextSubscriptions, nextChecks));
     setCredentialConfigured(credential.configured);
     setCredentialUpdatedAt(credential.updatedAt);
     const currentSelectedRunId = selectedRunIdRef.current;
@@ -116,7 +133,7 @@ export const BusinessResearchWorkspace: React.FC = () => {
     setSelectedSubscriptionId((current) => current && nextSubscriptions.some((item) => item.id === current)
       ? current
       : nextSubscriptions[0]?.id ?? null);
-  }, [api, setReports, setRuns, setSelectedReportId, setSelectedRunId, setSelectedSubscriptionId, setSubscriptions, setCredentialConfigured, setCredentialUpdatedAt, t]);
+  }, [api, loadSubscriptionChecks, setChecksBySubscription, setReports, setRuns, setSelectedReportId, setSelectedRunId, setSelectedSubscriptionId, setSubscriptions, setCredentialConfigured, setCredentialUpdatedAt, t]);
 
   const refreshEvaluation = useCallback(async () => {
     if (!api) throw new Error(t('research.businessResearch.errors.unavailable'));
@@ -140,6 +157,29 @@ export const BusinessResearchWorkspace: React.FC = () => {
     })();
     return () => { active = false; };
   }, [refreshEvaluation, refreshRecords, t]);
+
+  useEffect(() => {
+    if (!api || subscriptions.length === 0) return;
+    let active = true;
+    let inFlight = false;
+    const refreshChecks = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const nextChecks = await loadSubscriptionChecks(subscriptions);
+        if (active) {
+          setChecksBySubscription((current) => mergeSubscriptionChecks(current, subscriptions, nextChecks));
+        }
+      } finally {
+        inFlight = false;
+      }
+    };
+    const timer = setInterval(() => void refreshChecks(), 15_000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [api, loadSubscriptionChecks, setChecksBySubscription, subscriptions]);
 
   useEffect(() => {
     if (!api || selectedRun === undefined) {
@@ -180,18 +220,6 @@ export const BusinessResearchWorkspace: React.FC = () => {
       if (timer !== undefined) clearTimeout(timer);
     };
   }, [api, selectedRun?.id, setEvents, setReports, setRuns, setSelectedReportId, t]);
-
-  useEffect(() => {
-    if (!api || !selectedSubscription) {
-      setChecks([]);
-      return;
-    }
-    let active = true;
-    void api.listChecks(selectedSubscription.id).then((result) => {
-      if (active && result.ok) setChecks(result.data);
-    }).catch(() => undefined);
-    return () => { active = false; };
-  }, [api, selectedSubscription?.id, setChecks]);
 
   const updateForm = (patch: Partial<typeof form>) => setForm((current) => ({ ...current, ...patch }));
 
@@ -494,9 +522,9 @@ export const BusinessResearchWorkspace: React.FC = () => {
             {subscriptions.length === 0 ? <EmptyText>{t('research.businessResearch.monitor.empty')}</EmptyText> : (
               <div className="space-y-2">
                 {subscriptions.map((subscription) => {
-                  const latestCheck = checks.filter((item) => item.subscriptionId === subscription.id).at(-1);
+                  const latestCheck = checksBySubscription[subscription.id]?.at(-1);
                   const selected = selectedSubscription?.id === subscription.id;
-                  return <div key={subscription.id} className={`rounded-md border p-3 ${selected ? 'border-sky-200 bg-sky-50/40' : 'border-slate-200 bg-white'}`}>
+                  return <div key={subscription.id} data-testid={`business-research-monitor-${subscription.id}`} className={`rounded-md border p-3 ${selected ? 'border-sky-200 bg-sky-50/40' : 'border-slate-200 bg-white'}`}>
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <button type="button" onClick={() => setSelectedSubscriptionId(subscription.id)} aria-pressed={selected}
                         className="min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500">
@@ -600,6 +628,18 @@ const SmallAction: React.FC<{ title: string; onClick: () => void; children: Reac
     {children}
   </button>
 );
+
+function mergeSubscriptionChecks(
+  current: Record<string, BusinessResearchCheckRecord[]>,
+  subscriptions: readonly BusinessResearchSubscriptionRecord[],
+  loaded: Record<string, BusinessResearchCheckRecord[]>,
+): Record<string, BusinessResearchCheckRecord[]> {
+  const next: Record<string, BusinessResearchCheckRecord[]> = {};
+  for (const subscription of subscriptions) {
+    next[subscription.id] = loaded[subscription.id] ?? current[subscription.id] ?? [];
+  }
+  return next;
+}
 
 const RunTimeline: React.FC<{ events: ReturnType<typeof useAtomValue<typeof businessResearchEventsAtom>>; active: boolean; t: (key: string, options?: Record<string, unknown>) => string }> = ({ events, active, t }) => {
   if (events.length === 0) return <EmptyText>{t('research.businessResearch.timeline.empty')}</EmptyText>;
