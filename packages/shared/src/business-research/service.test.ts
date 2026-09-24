@@ -6,6 +6,7 @@ import {
   normalizeBusinessResearchInput,
   parseBusinessResearchId,
   type BusinessResearchEvidence,
+  type BusinessResearchSubscriptionId,
   type BusinessResearchTaskInput,
 } from '@finagent/core';
 import { BusinessResearchRepository, type BusinessResearchRunRecord } from './repository.ts';
@@ -68,6 +69,45 @@ function deferred<T = void>() {
 }
 
 describe('BusinessResearchService', () => {
+  it('persists the selected fixture mode and passes it to every run adapter', async () => {
+    const repository = new BusinessResearchRepository(tempStore());
+    const observed: string[] = [];
+    const service = new BusinessResearchService(repository, {
+      createDecisionModel(_runId, _task, mode) {
+        observed.push(`model:${mode}`);
+        return {
+          async decide({ observations }) {
+            return observations.length === 0
+              ? { kind: 'search_web', query: 'illustrative fixture search', taskId: 'competitor_products' }
+              : { kind: 'finish', rationale: 'The fixture demonstrates the saved evidence path.' };
+          },
+        };
+      },
+      createTools(runId, _task, mode) {
+        observed.push(`tools:${mode}`);
+        return {
+          async searchWeb(query) { return [evidence(runId, query)]; },
+          async openSource(evidenceId) { return { ...evidence(runId, 'fixture source'), id: evidenceId, grade: 'page_text' }; },
+        };
+      },
+      async generateReport({ runId, evidence: items, mode }) {
+        observed.push(`report:${mode}`);
+        return reportDraft(runId, items[0]!.id);
+      },
+      now: () => Date.parse('2026-09-24T00:00:00.000Z'),
+      idFactory: (kind, sequence) => `${kind}-fixture-mode-${sequence}`,
+    });
+
+    const queued = await service.start(taskInput(), { mode: 'fixture' });
+    const completed = await service.waitForRun(queued.id);
+    const events = await repository.getEvents(queued.id);
+
+    expect(queued.mode).toBe('fixture');
+    expect(completed?.mode).toBe('fixture');
+    expect(events[0]).toMatchObject({ type: 'run_started', mode: 'fixture' });
+    expect(observed).toEqual(['model:fixture', 'tools:fixture', 'report:fixture']);
+  });
+
   it('persists run events and evidence before the next tool or model step, then saves a validated report', async () => {
     const store = tempStore();
     const repository = new BusinessResearchRepository(store);
@@ -209,6 +249,47 @@ describe('BusinessResearchService', () => {
     expect(disabled).toBeDefined();
     expect(disabled?.enabled).toBe(false);
     expect(await service.listSubscriptions()).toEqual([disabled!]);
+  });
+
+  it('resumes paused subscriptions and removes them without erasing their check history', async () => {
+    const repository = new BusinessResearchRepository(tempStore());
+    let now = 1_790_208_000_000;
+    const service = new BusinessResearchService(repository, {
+      createDecisionModel: () => { throw new Error('Subscription changes must not start a run.'); },
+      createTools: () => { throw new Error('Subscription changes must not start a run.'); },
+      generateReport: async () => ({}),
+      now: () => now,
+      idFactory: (kind, sequence) => `${kind}-subscription-lifecycle-${sequence}`,
+    });
+    const subscription = await service.subscribe(taskInput());
+    await service.unsubscribe(subscription.id);
+
+    const resumeSubscription = Reflect.get(service, 'resumeSubscription') as
+      ((id: BusinessResearchSubscriptionId) => Promise<{ enabled: boolean; nextCheckAt: number } | undefined>) | undefined;
+    expect(typeof resumeSubscription).toBe('function');
+    if (resumeSubscription === undefined) return;
+
+    now += 60_000;
+    const resumed = await resumeSubscription.call(service, subscription.id);
+    expect(resumed).toMatchObject({ enabled: true, nextCheckAt: now + subscription.intervalMs });
+
+    await repository.appendCheck({
+      id: id('event', 'event-subscription-lifecycle-check'),
+      subscriptionId: subscription.id,
+      startedAt: now,
+      completedAt: now,
+      decision: { kind: 'skip', reason: 'no_change' },
+    });
+    const removeSubscription = Reflect.get(service, 'removeSubscription') as
+      ((id: BusinessResearchSubscriptionId) => Promise<{ enabled: boolean; removedAt?: number } | undefined>) | undefined;
+    expect(typeof removeSubscription).toBe('function');
+    if (removeSubscription === undefined) return;
+
+    const removed = await removeSubscription.call(service, subscription.id);
+    expect(removed).toMatchObject({ enabled: false, removedAt: now });
+    expect(await service.listSubscriptions()).toEqual([]);
+    expect(await repository.getSubscription(subscription.id)).toMatchObject({ enabled: false, removedAt: now });
+    expect(await repository.listChecks(subscription.id)).toHaveLength(1);
   });
 
   it('keeps a prior successful report when a later run cannot synthesize a validated report', async () => {

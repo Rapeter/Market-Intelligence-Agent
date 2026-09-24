@@ -91,6 +91,31 @@ describe('synthesizeBusinessResearchReport', () => {
     expect(result).toEqual({ ok: false, issues: [{ path: 'draft.claims[0].evidenceIds[0]', code: 'missing_evidence' }] });
   });
 
+  it('rejects fixture-grade evidence presented as a public company source', () => {
+    const mismatchedEvidence = { ...evidence[0]!, grade: 'fixture_data' as const };
+    const result = synthesizeBusinessResearchReport({
+      ...reportInput,
+      evidence: [mismatchedEvidence],
+      draft: {
+        title: 'Mislabelled evidence',
+        claims: [{
+          kind: 'supported',
+          id: claimId,
+          statement: 'The fixture is being represented as public evidence.',
+          evidenceIds: [mismatchedEvidence.id],
+        }],
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      issues: expect.arrayContaining([
+        { path: 'evidence', code: 'invalid_evidence' },
+        { path: 'draft.claims[0].evidenceIds[0]', code: 'missing_evidence' },
+      ]),
+    });
+  });
+
   it('rejects citations not permitted by the evaluation case annotation', async () => {
     const result = synthesizeBusinessResearchReport({
       ...reportInput,

@@ -2,6 +2,7 @@ import type {
   BusinessResearchAction,
   BusinessResearchEvidenceId,
   BusinessResearchObservation,
+  BusinessResearchRunMode,
   BusinessResearchRunId,
   BusinessResearchTaskInput,
   BusinessResearchTerminalOutcome,
@@ -14,7 +15,7 @@ interface EventDraftDetails {
 
 export type BusinessResearchEventDraft = EventDraftDetails &
   (
-    | { type: 'run_started'; task: BusinessResearchTaskInput }
+    | { type: 'run_started'; task: BusinessResearchTaskInput; mode?: BusinessResearchRunMode }
     | { type: 'phase_changed'; status: 'planning' | 'gathering' | 'synthesizing' }
     | { type: 'decision_made'; action: BusinessResearchAction }
     | { type: 'decision_rejected'; code: BusinessResearchActionRejectionCode }

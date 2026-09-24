@@ -3,6 +3,7 @@ import { Buffer } from 'node:buffer';
 import {
   isBusinessResearchEvidenceGrade,
   isBusinessResearchRunStatus,
+  isBusinessResearchRunMode,
   isBusinessResearchSourceKind,
   normalizeBusinessResearchInput,
   parseBusinessResearchId,
@@ -13,6 +14,7 @@ import {
   type BusinessResearchIdKind,
   type BusinessResearchReportId,
   type BusinessResearchRunId,
+  type BusinessResearchRunMode,
   type BusinessResearchRunState,
   type BusinessResearchSourceId,
   type BusinessResearchSubscriptionId,
@@ -47,6 +49,8 @@ const fileLocks = new Map<string, Promise<void>>();
 export interface BusinessResearchRunRecord {
   id: BusinessResearchRunId;
   task: BusinessResearchTaskInput;
+  /** Absent only on records created before run modes were introduced. */
+  mode?: BusinessResearchRunMode;
   state: BusinessResearchRunState;
   createdAt: number;
   updatedAt: number;
@@ -62,6 +66,8 @@ export interface BusinessResearchSubscriptionRecord {
   updatedAt: number;
   nextCheckAt: number;
   lastCheckAt?: number;
+  /** Soft removal keeps the run and check audit trail intact. */
+  removedAt?: number;
 }
 
 export interface BusinessResearchCheckRecord {
@@ -396,6 +402,7 @@ function isRunRecord(value: unknown): value is BusinessResearchRunRecord {
   if (!isRecord(value)) return false;
   return parseBusinessResearchId('run', value.id) !== undefined &&
     isValidTaskInput(value.task) &&
+    (value.mode === undefined || isBusinessResearchRunMode(value.mode)) &&
     isRunState(value.state) &&
     isEpoch(value.createdAt) &&
     isEpoch(value.updatedAt) &&
@@ -421,7 +428,8 @@ function isSubscription(value: unknown): value is BusinessResearchSubscriptionRe
     Number.isInteger(value.intervalMs) && Number(value.intervalMs) >= MIN_INTERVAL_MS &&
     typeof value.enabled === 'boolean' &&
     isEpoch(value.createdAt) && isEpoch(value.updatedAt) && isEpoch(value.nextCheckAt) &&
-    (value.lastCheckAt === undefined || isEpoch(value.lastCheckAt));
+    (value.lastCheckAt === undefined || isEpoch(value.lastCheckAt)) &&
+    (value.removedAt === undefined || isEpoch(value.removedAt));
 }
 
 function assertSubscription(record: BusinessResearchSubscriptionRecord): void {
@@ -459,7 +467,8 @@ function assertEvent(event: BusinessResearchEvent): void {
 function isEvent(value: unknown): value is BusinessResearchEvent {
   if (!isRecord(value) || parseBusinessResearchId('run', value.runId) === undefined ||
     !Number.isInteger(value.sequence) || Number(value.sequence) < 1 || !isEpoch(value.timestamp)) return false;
-  if (value.type === 'run_started') return isValidTaskInput(value.task);
+  if (value.type === 'run_started') return isValidTaskInput(value.task) &&
+    (value.mode === undefined || isBusinessResearchRunMode(value.mode));
   if (value.type === 'phase_changed') return ['planning', 'gathering', 'synthesizing'].includes(String(value.status));
   if (value.type === 'decision_made') return isAction(value.action);
   if (value.type === 'decision_rejected') return typeof value.code === 'string' && value.code.length <= 64;
@@ -572,11 +581,12 @@ function assertEvidence(evidence: BusinessResearchEvidence): void {
 
 function isEvidence(value: unknown): value is BusinessResearchEvidence {
   if (!isRecord(value)) return false;
+  const fixtureGradeMatchesSource = (value.sourceKind === 'fixture') === (value.grade === 'fixture_data');
   return parseBusinessResearchId('evidence', value.id) !== undefined &&
     parseBusinessResearchId('source', value.sourceId) !== undefined &&
     typeof value.title === 'string' && cleanEvidenceText(value.title, 500).length > 0 &&
     typeof value.url === 'string' && canonicalizeEvidenceUrl(value.url) !== undefined &&
-    isBusinessResearchSourceKind(value.sourceKind) && isBusinessResearchEvidenceGrade(value.grade) &&
+    isBusinessResearchSourceKind(value.sourceKind) && isBusinessResearchEvidenceGrade(value.grade) && fixtureGradeMatchesSource &&
     typeof value.query === 'string' && cleanEvidenceText(value.query, 500).length > 0 &&
     typeof value.excerpt === 'string' && cleanEvidenceText(value.excerpt, 4_000).length > 0 && isIsoTime(value.retrievedAt);
 }

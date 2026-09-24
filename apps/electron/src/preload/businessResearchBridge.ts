@@ -2,7 +2,7 @@ export interface BusinessResearchBridgeApi {
   getCredentialStatus: () => Promise<unknown>;
   setBraveKey: (input: { apiKey: string }) => Promise<unknown>;
   removeBraveKey: () => Promise<unknown>;
-  start: (input: { task: unknown }) => Promise<unknown>;
+  start: (input: { task: unknown; mode?: 'live' | 'fixture' }) => Promise<unknown>;
   cancel: (input: { runId: string }) => Promise<unknown>;
   listRuns: () => Promise<unknown>;
   getRun: (input: { runId: string }) => Promise<unknown>;
@@ -12,6 +12,8 @@ export interface BusinessResearchBridgeApi {
   evaluate: () => Promise<unknown>;
   subscribe: (input: { task: unknown; intervalMs?: number }) => Promise<unknown>;
   unsubscribe: (input: { subscriptionId: string }) => Promise<unknown>;
+  resumeSubscription: (input: { subscriptionId: string }) => Promise<unknown>;
+  removeSubscription: (input: { subscriptionId: string }) => Promise<unknown>;
   listSubscriptions: () => Promise<unknown>;
   listChecks: (input: { subscriptionId: string }) => Promise<unknown>;
   checkDue: () => Promise<unknown>;
@@ -35,6 +37,8 @@ export function createBusinessResearchBridge(invoke: BusinessResearchIpcInvoke):
     evaluate: () => invoke('businessResearch:evaluate'),
     subscribe: (input) => invoke('businessResearch:subscribe', input),
     unsubscribe: (input) => invoke('businessResearch:unsubscribe', input),
+    resumeSubscription: (input) => invoke('businessResearch:resumeSubscription', input),
+    removeSubscription: (input) => invoke('businessResearch:removeSubscription', input),
     listSubscriptions: () => invoke('businessResearch:listSubscriptions'),
     listChecks: (input) => invoke('businessResearch:listChecks', input),
     checkDue: () => invoke('businessResearch:checkDue'),

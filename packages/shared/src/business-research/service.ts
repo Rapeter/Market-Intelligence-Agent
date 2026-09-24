@@ -7,6 +7,8 @@ import {
   type BusinessResearchObservation,
   type BusinessResearchReportId,
   type BusinessResearchRunId,
+  isBusinessResearchRunMode,
+  type BusinessResearchRunMode,
   type BusinessResearchRunState,
   type BusinessResearchSubscriptionId,
   type BusinessResearchTaskInput,
@@ -26,14 +28,15 @@ const MIN_SUBSCRIPTION_INTERVAL_MS = 60 * 60 * 1_000;
 export interface BusinessResearchReportGenerationInput {
   runId: BusinessResearchRunId;
   task: BusinessResearchTaskInput;
+  mode: BusinessResearchRunMode;
   evidence: readonly BusinessResearchEvidence[];
   outcome: BusinessResearchTerminalOutcome;
   signal: AbortSignal;
 }
 
 export interface BusinessResearchServiceOptions {
-  createDecisionModel: (runId: BusinessResearchRunId, task: BusinessResearchTaskInput) => DecisionModelPort;
-  createTools: (runId: BusinessResearchRunId, task: BusinessResearchTaskInput) => BusinessResearchToolPort;
+  createDecisionModel: (runId: BusinessResearchRunId, task: BusinessResearchTaskInput, mode: BusinessResearchRunMode) => DecisionModelPort;
+  createTools: (runId: BusinessResearchRunId, task: BusinessResearchTaskInput, mode: BusinessResearchRunMode) => BusinessResearchToolPort;
   generateReport: (input: BusinessResearchReportGenerationInput) => Promise<unknown>;
   now?: () => number;
   idFactory?: (kind: BusinessResearchIdKind, sequence: number) => string;
@@ -64,12 +67,16 @@ export class BusinessResearchService {
 
   async start(
     value: unknown,
-    options: { runId?: BusinessResearchRunId } = {},
+    options: { runId?: BusinessResearchRunId; mode?: BusinessResearchRunMode } = {},
   ): Promise<BusinessResearchRunRecord> {
     await this.ensureRecovered();
     const normalized = normalizeBusinessResearchInput(value);
     if (!normalized.ok) {
       throw createCodeError('BUSINESS_RESEARCH_INVALID_INPUT', 'Invalid business research input.');
+    }
+    const mode = options.mode ?? 'live';
+    if (!isBusinessResearchRunMode(mode)) {
+      throw createCodeError('BUSINESS_RESEARCH_INVALID_MODE', 'Business research mode must be live or fixture.');
     }
     const runId = options.runId ?? this.createId('run');
     const active = this.activeRuns.get(runId);
@@ -84,6 +91,7 @@ export class BusinessResearchService {
     const record: BusinessResearchRunRecord = {
       id: runId,
       task: normalized.value,
+      mode,
       state: { status: 'queued', updatedAt: isoTime(timestamp) },
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -172,14 +180,35 @@ export class BusinessResearchService {
   async unsubscribe(subscriptionId: BusinessResearchSubscriptionId): Promise<BusinessResearchSubscriptionRecord | undefined> {
     const current = await this.repository.getSubscription(subscriptionId);
     if (current === undefined) return undefined;
+    if (current.removedAt !== undefined) return current;
     if (!current.enabled) return current;
     const disabled = { ...current, enabled: false, updatedAt: this.now() };
     await this.repository.saveSubscription(disabled);
     return structuredClone(disabled);
   }
 
-  listSubscriptions(): Promise<BusinessResearchSubscriptionRecord[]> {
-    return this.repository.listSubscriptions();
+  async resumeSubscription(subscriptionId: BusinessResearchSubscriptionId): Promise<BusinessResearchSubscriptionRecord | undefined> {
+    const current = await this.repository.getSubscription(subscriptionId);
+    if (current === undefined || current.removedAt !== undefined) return undefined;
+    if (current.enabled) return current;
+    const now = this.now();
+    const resumed = { ...current, enabled: true, updatedAt: now, nextCheckAt: now + current.intervalMs };
+    await this.repository.saveSubscription(resumed);
+    return structuredClone(resumed);
+  }
+
+  async removeSubscription(subscriptionId: BusinessResearchSubscriptionId): Promise<BusinessResearchSubscriptionRecord | undefined> {
+    const current = await this.repository.getSubscription(subscriptionId);
+    if (current === undefined) return undefined;
+    if (current.removedAt !== undefined) return current;
+    const now = this.now();
+    const removed = { ...current, enabled: false, updatedAt: now, removedAt: now };
+    await this.repository.saveSubscription(removed);
+    return structuredClone(removed);
+  }
+
+  async listSubscriptions(): Promise<BusinessResearchSubscriptionRecord[]> {
+    return (await this.repository.listSubscriptions()).filter((subscription) => subscription.removedAt === undefined);
   }
 
   private async execute(record: BusinessResearchRunRecord, signal: AbortSignal): Promise<void> {
@@ -191,8 +220,8 @@ export class BusinessResearchService {
       const runtimeResult = await runBusinessResearch({
         runId: record.id,
         task: record.task,
-        decisionModel: this.options.createDecisionModel(record.id, record.task),
-        tools: this.options.createTools(record.id, record.task),
+        decisionModel: this.options.createDecisionModel(record.id, record.task, record.mode ?? 'live'),
+        tools: this.options.createTools(record.id, record.task, record.mode ?? 'live'),
         signal,
         now: this.now,
         limits: this.options.runtimeLimits,
@@ -210,8 +239,9 @@ export class BusinessResearchService {
       if (finalOutcome.status === 'completed' || finalOutcome.status === 'partial') {
         try {
           const draft = await this.options.generateReport({
-            runId: record.id,
-            task: record.task,
+          runId: record.id,
+          task: record.task,
+          mode: record.mode ?? 'live',
             evidence: runtimeResult.evidence,
             outcome: finalOutcome,
             signal,
@@ -261,7 +291,7 @@ export class BusinessResearchService {
         if (last?.type !== 'run_terminal') {
           if (events.length === 0) {
             const log = createBusinessResearchEventLog(record.id, this.now);
-            await this.repository.appendEvent(log.append({ type: 'run_started', task: record.task }));
+            await this.repository.appendEvent(log.append({ type: 'run_started', task: record.task, mode: record.mode ?? 'live' }));
           }
           const prefix = await this.repository.getEvents(record.id);
           await this.repository.appendEvent({
@@ -293,7 +323,10 @@ export class BusinessResearchService {
     event: BusinessResearchEvent,
     update: (record: BusinessResearchRunRecord) => void,
   ): Promise<void> {
-    await this.repository.appendEvent(event);
+    const persistedEvent = event.type === 'run_started'
+      ? { ...event, mode: current.mode ?? 'live' }
+      : event;
+    await this.repository.appendEvent(persistedEvent);
     if (event.type === 'observation_recorded') {
       const evidence = evidenceFromObservation(event.observation);
       if (evidence.length > 0) await this.repository.saveEvidence(current.id, evidence);
@@ -329,7 +362,7 @@ export class BusinessResearchService {
       let events = await this.repository.getEvents(runId);
       if (events.length === 0 && record !== undefined) {
         const log = createBusinessResearchEventLog(runId, this.now);
-        await this.repository.appendEvent(log.append({ type: 'run_started', task: record.task }));
+        await this.repository.appendEvent(log.append({ type: 'run_started', task: record.task, mode: record.mode ?? 'live' }));
         events = await this.repository.getEvents(runId);
       }
       const replay = replayBusinessResearchEvents(events);
@@ -337,6 +370,7 @@ export class BusinessResearchService {
       const task = replay.state.task ?? record?.task;
       if (task === undefined) continue;
       const startedAt = events.find((event) => event.type === 'run_started')?.timestamp ?? record?.createdAt ?? this.now();
+      const mode = events.find((event) => event.type === 'run_started')?.mode ?? record?.mode ?? 'live';
       const recordedReport = (await this.repository.listReports()).find((candidate) => candidate.runId === runId);
       let outcome = replay.state.outcome ?? (record !== undefined && isTerminalState(record.state)
         ? outcomeFromState(record.state)
@@ -362,6 +396,7 @@ export class BusinessResearchService {
       const recovered: BusinessResearchRunRecord = {
         id: runId,
         task,
+        mode,
         state: stateFromOutcome(outcome, finalTimestamp),
         createdAt: startedAt,
         updatedAt: finalTimestamp,

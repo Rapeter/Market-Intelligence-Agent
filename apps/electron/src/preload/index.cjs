@@ -23,10 +23,36 @@ var __toCommonJS = (from) => {
 };
 var __moduleCache;
 
-// apps/electron/src/preload/index.ts
+// src/preload/index.ts
 var exports_preload = {};
 module.exports = __toCommonJS(exports_preload);
 var import_electron = require("electron");
+
+// src/preload/businessResearchBridge.ts
+function createBusinessResearchBridge(invoke) {
+  return {
+    getCredentialStatus: () => invoke("businessResearch:getCredentialStatus"),
+    setBraveKey: (input) => invoke("businessResearch:setBraveKey", input),
+    removeBraveKey: () => invoke("businessResearch:removeBraveKey"),
+    start: (input) => invoke("businessResearch:start", input),
+    cancel: (input) => invoke("businessResearch:cancel", input),
+    listRuns: () => invoke("businessResearch:listRuns"),
+    getRun: (input) => invoke("businessResearch:getRun", input),
+    listEvents: (input) => invoke("businessResearch:listEvents", input),
+    listReports: () => invoke("businessResearch:listReports"),
+    getReport: (input) => invoke("businessResearch:getReport", input),
+    evaluate: () => invoke("businessResearch:evaluate"),
+    subscribe: (input) => invoke("businessResearch:subscribe", input),
+    unsubscribe: (input) => invoke("businessResearch:unsubscribe", input),
+    resumeSubscription: (input) => invoke("businessResearch:resumeSubscription", input),
+    removeSubscription: (input) => invoke("businessResearch:removeSubscription", input),
+    listSubscriptions: () => invoke("businessResearch:listSubscriptions"),
+    listChecks: (input) => invoke("businessResearch:listChecks", input),
+    checkDue: () => invoke("businessResearch:checkDue")
+  };
+}
+
+// src/preload/index.ts
 var electronAPI = {
   window: {
     minimize: () => import_electron.ipcRenderer.invoke("window:minimize"),
@@ -100,6 +126,7 @@ var electronAPI = {
     getReport: (input) => import_electron.ipcRenderer.invoke("research:getReport", input),
     getDiff: (input) => import_electron.ipcRenderer.invoke("research:getDiff", input)
   },
+  businessResearch: createBusinessResearchBridge((channel, ...args) => import_electron.ipcRenderer.invoke(channel, ...args)),
   thesis: {
     list: (symbol) => import_electron.ipcRenderer.invoke("thesis:list", symbol),
     getReport: (symbol) => import_electron.ipcRenderer.invoke("thesis:getReport", symbol),

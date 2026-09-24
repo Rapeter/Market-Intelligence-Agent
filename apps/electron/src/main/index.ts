@@ -257,6 +257,12 @@ ipcMain.handle('businessResearch:subscribe', async (_event, input: unknown) =>
 ipcMain.handle('businessResearch:unsubscribe', async (_event, input: unknown) =>
   toIpcResult(() => agentKernelHost.businessResearchUnsubscribe(input))
 );
+ipcMain.handle('businessResearch:resumeSubscription', async (_event, input: unknown) =>
+  toIpcResult(() => agentKernelHost.businessResearchResumeSubscription(input))
+);
+ipcMain.handle('businessResearch:removeSubscription', async (_event, input: unknown) =>
+  toIpcResult(() => agentKernelHost.businessResearchRemoveSubscription(input))
+);
 ipcMain.handle('businessResearch:listSubscriptions', async () =>
   toIpcResult(() => agentKernelHost.businessResearchListSubscriptions())
 );

@@ -99,6 +99,7 @@ mock.module('electron', () => ({
 }));
 
 const noopStore = class {
+  resolve = (file: string) => file;
   read = async (_file: string, fallback: unknown) => fallback;
   write = async () => undefined;
   remove = async () => undefined;
@@ -375,6 +376,39 @@ afterEach(() => {
 });
 
 describe('AgentKernelHost', () => {
+  it('accepts only fixture/live business research modes and preserves fixture mode on the run record', async () => {
+    const host = new AgentKernelHost();
+    const task = {
+      industry: 'Electric vehicles',
+      question: 'Compare public product updates',
+      competitors: ['Northstar Motors', 'Harbor Auto'],
+      strategyId: 'competitor_deep_dive',
+    };
+
+    let started: unknown;
+    try {
+      started = await host.businessResearchStart({ task, mode: 'fixture' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Fixture start rejected before returning a run: ${message}`);
+    }
+    expect(started).toMatchObject({ mode: 'fixture' });
+    await expect(host.businessResearchStart({ task, mode: 'pretend-live' })).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' });
+    await host.dispose();
+  });
+
+  it('validates pause-resume-remove subscription operations at the main-process boundary', async () => {
+    const host = new AgentKernelHost();
+    const resume = Reflect.get(host, 'businessResearchResumeSubscription') as ((input: unknown) => Promise<unknown>) | undefined;
+    const remove = Reflect.get(host, 'businessResearchRemoveSubscription') as ((input: unknown) => Promise<unknown>) | undefined;
+    expect(typeof resume).toBe('function');
+    expect(typeof remove).toBe('function');
+    if (resume === undefined || remove === undefined) return;
+    await expect(resume.call(host, { subscriptionId: '../outside' })).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' });
+    await expect(remove.call(host, { subscriptionId: '../outside' })).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' });
+    await host.dispose();
+  });
+
   it('builds the kernel on the electron userData store', () => {
     const host = new AgentKernelHost();
 

@@ -14,3 +14,4 @@ export * from './repository.ts';
 export * from './service.ts';
 export * from './scheduler.ts';
 export * from './pi-adapter.ts';
+export * from './fixture.ts';

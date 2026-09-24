@@ -132,6 +132,14 @@ describe('BusinessResearchRepository', () => {
     expect(await reopened.listSubscriptions()).toEqual([subscription]);
   });
 
+  it('rejects fixture grades paired with public source kinds', async () => {
+    const repository = new BusinessResearchRepository(tempStore());
+    const runId = id('run', 'run-fixture-grade-mismatch');
+    const invalid = { ...evidence(), grade: 'fixture_data' as const };
+
+    await expect(repository.saveEvidence(runId, [invalid])).rejects.toThrow('Invalid business research evidence.');
+  });
+
   it('only appends the next valid event sequence and preserves the last durable prefix after an interrupted write', async () => {
     const store = new InterruptingJsonFileStore(mkdtempSync(join(tmpdir(), 'market-research-interrupted-write-')));
     const run = runRecord();

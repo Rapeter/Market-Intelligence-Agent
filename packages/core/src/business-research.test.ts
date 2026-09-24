@@ -2,6 +2,8 @@ import { describe, expect, it } from 'bun:test';
 import {
   BUSINESS_RESEARCH_STRATEGY_KEYS,
   BUSINESS_RESEARCH_TASK_KEYS,
+  isBusinessResearchEvidenceGrade,
+  isBusinessResearchSourceKind,
   isBusinessResearchStrategyId,
   isBusinessResearchTaskId,
   normalizeBusinessResearchInput,
@@ -15,6 +17,13 @@ import {
 } from './business-research.ts';
 
 describe('business research contracts', () => {
+  it('marks deterministic demonstration evidence separately from public evidence', () => {
+    expect(isBusinessResearchSourceKind('fixture')).toBe(true);
+    expect(isBusinessResearchEvidenceGrade('fixture_data')).toBe(true);
+    expect(isBusinessResearchSourceKind('unknown')).toBe(false);
+    expect(isBusinessResearchEvidenceGrade('unknown')).toBe(false);
+  });
+
   it('exposes six unique task keys and three valid strategy keys', () => {
     expect(BUSINESS_RESEARCH_TASK_KEYS).toHaveLength(6);
     expect(new Set(BUSINESS_RESEARCH_TASK_KEYS).size).toBe(6);

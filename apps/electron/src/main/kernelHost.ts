@@ -74,8 +74,9 @@ import type {
   BusinessResearchReportId,
   BusinessResearchSubscriptionId,
   BusinessResearchIdKind,
+  BusinessResearchRunMode,
 } from '@finagent/core';
-import { DEFAULT_INSTRUMENT_CATALOG, InstrumentResolver, parseBusinessResearchId, STRATEGY_IDS } from '@finagent/core';
+import { DEFAULT_INSTRUMENT_CATALOG, InstrumentResolver, isBusinessResearchRunMode, parseBusinessResearchId, STRATEGY_IDS } from '@finagent/core';
 import { isLocalePreference } from '@finagent/i18n';
 import { createAppPreferencesService, type AppPreferencesService } from './app-preferences.ts';
 import { buildImpactPrompt, buildRiskSummaryPrompt, buildSynthesisPrompt } from './research-prompts.ts';
@@ -171,6 +172,9 @@ import {
   createBraveBusinessResearchTools,
   createPiBusinessResearchAdapter,
   evaluateBusinessResearchEvaluationCorpus,
+  createBusinessResearchFixtureDecisionModel,
+  createBusinessResearchFixtureTools,
+  createBusinessResearchFixtureReportDraft,
   type BusinessResearchToolPort,
   type BusinessResearchMonitorSourceSnapshot,
 } from '@finagent/shared/business-research';
@@ -515,15 +519,20 @@ export class AgentKernelHost {
           },
         });
     this.businessResearchService = new BusinessResearchService(this.businessResearchRepository, {
-      createDecisionModel: (runId) => businessResearchAdapter?.createDecisionModel(runId) ?? {
-        async decide() {
-          throw createCodeError('BUSINESS_RESEARCH_PI_UNAVAILABLE', 'Configure an available Pi model runtime to run research.');
-        },
-      },
-      createTools: () => createCredentialBackedBraveTools(
-        () => this.credentials.getCredential(BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID),
-      ),
-      generateReport: (input) => {
+      createDecisionModel: (runId, task, mode) => mode === 'fixture'
+        ? createBusinessResearchFixtureDecisionModel(task)
+        : businessResearchAdapter?.createDecisionModel(runId) ?? {
+            async decide() {
+              throw createCodeError('BUSINESS_RESEARCH_PI_UNAVAILABLE', 'Configure an available Pi model runtime to run research.');
+            },
+          },
+      createTools: (runId, task, mode) => mode === 'fixture'
+        ? createBusinessResearchFixtureTools(runId, task)
+        : createCredentialBackedBraveTools(
+            () => this.credentials.getCredential(BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID),
+          ),
+      generateReport: async (input) => {
+        if (input.mode === 'fixture') return createBusinessResearchFixtureReportDraft(input);
         if (!businessResearchAdapter) {
           throw createCodeError('BUSINESS_RESEARCH_PI_UNAVAILABLE', 'Configure an available Pi model runtime to write reports.');
         }
@@ -853,7 +862,11 @@ export class AgentKernelHost {
 
   async businessResearchStart(input: unknown) {
     const request = requireObject(input);
-    return this.businessResearchService.start(request.task ?? request);
+    const mode = request.mode === undefined ? 'live' : request.mode;
+    if (!isBusinessResearchRunMode(mode)) {
+      throw createCodeError('INVALID_ARGUMENT', 'mode must be live or fixture.');
+    }
+    return this.businessResearchService.start(request.task ?? request, { mode });
   }
 
   async businessResearchCancel(input: unknown): Promise<boolean> {
@@ -901,6 +914,20 @@ export class AgentKernelHost {
   async businessResearchUnsubscribe(input: unknown) {
     const request = requireObject(input);
     return this.businessResearchService.unsubscribe(
+      requireBusinessResearchId('subscription', request.subscriptionId) as BusinessResearchSubscriptionId,
+    );
+  }
+
+  async businessResearchResumeSubscription(input: unknown) {
+    const request = requireObject(input);
+    return this.businessResearchService.resumeSubscription(
+      requireBusinessResearchId('subscription', request.subscriptionId) as BusinessResearchSubscriptionId,
+    );
+  }
+
+  async businessResearchRemoveSubscription(input: unknown) {
+    const request = requireObject(input);
+    return this.businessResearchService.removeSubscription(
       requireBusinessResearchId('subscription', request.subscriptionId) as BusinessResearchSubscriptionId,
     );
   }

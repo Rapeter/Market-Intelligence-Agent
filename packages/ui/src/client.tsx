@@ -4,6 +4,11 @@ import type {
   AlertRule,
   AlertTriggerEvent,
   ApiResult,
+  BusinessResearchRunMode,
+  BusinessResearchRunId,
+  BusinessResearchReportId,
+  BusinessResearchSubscriptionId,
+  BusinessResearchTaskInput,
   CalcIndex,
   Comparison,
   CredentialInfo,
@@ -59,6 +64,14 @@ import type { DiagnosticsBundle } from './client/diagnostics';
 import type { MarketPulseSnapshot } from './client/pulse';
 import type { ScreeningChannel } from './client/screening';
 import type { AutomationChannel } from './client/automation';
+import type {
+  BusinessResearchCheckRecord,
+  BusinessResearchEvent,
+  BusinessResearchEvaluationMetrics,
+  BusinessResearchReport as BusinessResearchSavedReport,
+  BusinessResearchRunRecord,
+  BusinessResearchSubscriptionRecord,
+} from '@finagent/shared/business-research';
 
 /** Renderer-safe capability metadata (schemas never cross IPC). */
 export interface CapabilityMetadata {
@@ -244,19 +257,21 @@ export interface FinagentClient {
     getCredentialStatus: () => Promise<ApiResult<{ configured: boolean; updatedAt?: number }>>;
     setBraveKey: (apiKey: string) => Promise<ApiResult<{ configured: boolean; updatedAt?: number }>>;
     removeBraveKey: () => Promise<ApiResult<{ configured: boolean; updatedAt?: number }>>;
-    start: (task: unknown) => Promise<ApiResult<unknown>>;
-    cancel: (runId: string) => Promise<ApiResult<boolean>>;
-    listRuns: () => Promise<ApiResult<unknown[]>>;
-    getRun: (runId: string) => Promise<ApiResult<unknown>>;
-    listEvents: (runId: string) => Promise<ApiResult<unknown[]>>;
-    listReports: () => Promise<ApiResult<unknown[]>>;
-    getReport: (reportId: string) => Promise<ApiResult<unknown>>;
-    evaluate: () => Promise<ApiResult<unknown>>;
-    subscribe: (task: unknown, intervalMs?: number) => Promise<ApiResult<unknown>>;
-    unsubscribe: (subscriptionId: string) => Promise<ApiResult<unknown>>;
-    listSubscriptions: () => Promise<ApiResult<unknown[]>>;
-    listChecks: (subscriptionId: string) => Promise<ApiResult<unknown[]>>;
-    checkDue: () => Promise<ApiResult<unknown[]>>;
+    start: (task: BusinessResearchTaskInput, mode?: BusinessResearchRunMode) => Promise<ApiResult<BusinessResearchRunRecord>>;
+    cancel: (runId: BusinessResearchRunId) => Promise<ApiResult<boolean>>;
+    listRuns: () => Promise<ApiResult<BusinessResearchRunRecord[]>>;
+    getRun: (runId: BusinessResearchRunId) => Promise<ApiResult<BusinessResearchRunRecord | undefined>>;
+    listEvents: (runId: BusinessResearchRunId) => Promise<ApiResult<BusinessResearchEvent[]>>;
+    listReports: () => Promise<ApiResult<BusinessResearchSavedReport[]>>;
+    getReport: (reportId: BusinessResearchReportId) => Promise<ApiResult<BusinessResearchSavedReport | undefined>>;
+    evaluate: () => Promise<ApiResult<BusinessResearchEvaluationMetrics>>;
+    subscribe: (task: BusinessResearchTaskInput, intervalMs?: number) => Promise<ApiResult<BusinessResearchSubscriptionRecord>>;
+    unsubscribe: (subscriptionId: BusinessResearchSubscriptionId) => Promise<ApiResult<BusinessResearchSubscriptionRecord | undefined>>;
+    resumeSubscription: (subscriptionId: BusinessResearchSubscriptionId) => Promise<ApiResult<BusinessResearchSubscriptionRecord | undefined>>;
+    removeSubscription: (subscriptionId: BusinessResearchSubscriptionId) => Promise<ApiResult<BusinessResearchSubscriptionRecord | undefined>>;
+    listSubscriptions: () => Promise<ApiResult<BusinessResearchSubscriptionRecord[]>>;
+    listChecks: (subscriptionId: BusinessResearchSubscriptionId) => Promise<ApiResult<BusinessResearchCheckRecord[]>>;
+    checkDue: () => Promise<ApiResult<BusinessResearchCheckRecord[]>>;
   };
   screening?: ScreeningChannel;
   outcome?: {
@@ -394,6 +409,8 @@ export const fallbackClient: FinagentClient = {
     evaluate: missingClient('businessResearch.evaluate'),
     subscribe: missingClient('businessResearch.subscribe'),
     unsubscribe: missingClient('businessResearch.unsubscribe'),
+    resumeSubscription: missingClient('businessResearch.resumeSubscription'),
+    removeSubscription: missingClient('businessResearch.removeSubscription'),
     listSubscriptions: missingClient('businessResearch.listSubscriptions'),
     listChecks: missingClient('businessResearch.listChecks'),
     checkDue: missingClient('businessResearch.checkDue'),

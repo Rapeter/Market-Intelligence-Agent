@@ -200,6 +200,7 @@ describe('Pi business research adapter', () => {
     expect(await adapter.generateReport({
       runId,
       task,
+      mode: 'live',
       evidence: [],
       outcome: { status: 'partial', reason: 'No usable sources.' },
       signal: new AbortController().signal,
@@ -214,6 +215,7 @@ describe('Pi business research adapter', () => {
     await expect(adapter.generateReport({
       runId,
       task,
+      mode: 'live',
       evidence: [],
       outcome: { status: 'partial', reason: 'No usable sources.' },
       signal: new AbortController().signal,

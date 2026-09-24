@@ -35,6 +35,14 @@ export const BUSINESS_RESEARCH_STRATEGY_KEYS = [
 
 export type BusinessResearchStrategyId = (typeof BUSINESS_RESEARCH_STRATEGY_KEYS)[number];
 
+export const BUSINESS_RESEARCH_RUN_MODES = ['live', 'fixture'] as const;
+
+export type BusinessResearchRunMode = (typeof BUSINESS_RESEARCH_RUN_MODES)[number];
+
+export function isBusinessResearchRunMode(value: unknown): value is BusinessResearchRunMode {
+  return typeof value === 'string' && BUSINESS_RESEARCH_RUN_MODES.some((mode) => mode === value);
+}
+
 export type BusinessResearchSourceId = BusinessResearchId<'source'>;
 export type BusinessResearchEvidenceId = BusinessResearchId<'evidence'>;
 export type BusinessResearchRunId = BusinessResearchId<'run'>;
@@ -85,11 +93,12 @@ export const BUSINESS_RESEARCH_SOURCE_KINDS = [
   'news',
   'public_feedback',
   'other_public',
+  'fixture',
 ] as const;
 
 export type BusinessResearchSourceKind = (typeof BUSINESS_RESEARCH_SOURCE_KINDS)[number];
 
-export const BUSINESS_RESEARCH_EVIDENCE_GRADES = ['search_excerpt', 'page_text'] as const;
+export const BUSINESS_RESEARCH_EVIDENCE_GRADES = ['search_excerpt', 'page_text', 'fixture_data'] as const;
 
 export type BusinessResearchEvidenceGrade = (typeof BUSINESS_RESEARCH_EVIDENCE_GRADES)[number];
 

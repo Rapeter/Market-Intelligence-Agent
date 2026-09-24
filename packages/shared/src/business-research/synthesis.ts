@@ -184,10 +184,11 @@ function parseEvidence(value: unknown): BusinessResearchEvidence[] | undefined {
     const title = cleanEvidenceText(item.title, 500);
     const query = cleanEvidenceText(item.query, 500);
     const excerpt = cleanEvidenceText(item.excerpt, 4_000);
+    const fixtureGradeMatchesSource = (item.sourceKind === 'fixture') === (item.grade === 'fixture_data');
     if (
       id === undefined || sourceId === undefined || url === undefined || title.length === 0 ||
       query.length === 0 || excerpt.length === 0 || !isBusinessResearchSourceKind(item.sourceKind) ||
-      !isBusinessResearchEvidenceGrade(item.grade) || typeof item.retrievedAt !== 'string' ||
+      !isBusinessResearchEvidenceGrade(item.grade) || !fixtureGradeMatchesSource || typeof item.retrievedAt !== 'string' ||
       !Number.isFinite(Date.parse(item.retrievedAt))
     ) {
       return undefined;
