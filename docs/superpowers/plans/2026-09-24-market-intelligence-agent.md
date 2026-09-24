@@ -138,11 +138,11 @@ export interface BusinessResearchToolPort {
 - Create: `packages/shared/src/business-research/service.ts`, `service.test.ts`, `scheduler.ts`, `scheduler.test.ts`
 - Modify: `packages/shared/src/business-research/index.ts`, `packages/shared/src/index.ts`
 
-- [ ] Persist input snapshot, evidence, report, append-only events, subscription state, checks, and run fingerprints in separate validated JSON records under the existing user data root.
-- [ ] Implement `start`, `cancel`, `getRun`, `listRuns`, `getReport`, `listReports`, `subscribe`, `unsubscribe`, `listSubscriptions`, and `checkDue` with idempotent recovery.
-- [ ] Schedule checks every 24 hours by default (minimum one hour), catch up one overdue check on application restart, deduplicate per subscription/fingerprint, merge concurrent triggers, and persist skip/failure reasons.
-- [ ] Test interrupted writes, corrupted/missing checkpoint, app restart, duplicate signal, changed known page, unrelated item, disabled subscription, and no-change paths with a controllable clock.
-- [ ] Run focused repository/service/scheduler tests; commit and push `feat: persist research and monitor public changes`.
+- [x] Persist input snapshot, evidence, report, append-only events, subscription state, checks, and run fingerprints in separate validated JSON records under the existing user data root.
+- [x] Implement `start`, `cancel`, `getRun`, `listRuns`, `getReport`, `listReports`, `subscribe`, `unsubscribe`, `listSubscriptions`, and `checkDue` with idempotent recovery.
+- [x] Schedule checks every 24 hours by default (minimum one hour), catch up one overdue check on application restart, deduplicate per subscription/fingerprint, merge concurrent triggers, and persist skip/failure reasons.
+- [x] Test interrupted writes, corrupted/missing checkpoint, app restart, duplicate signal, changed known page, unrelated item, disabled subscription, and no-change paths with a controllable clock.
+- [x] Run focused repository/service/scheduler tests; commit and push `feat: persist research and monitor public changes`.
 
 ### Task 7: Wire credentials, runtime adapter, main-process composition, and typed IPC
 
@@ -151,12 +151,12 @@ export interface BusinessResearchToolPort {
 - Create: `.pi/extensions/finagent/businessResearchTools.ts`, `businessResearchTools.test.ts`
 - Modify: `.pi/extensions/finagent/index.ts`, `apps/electron/src/main/kernelHost.ts`, `apps/electron/src/main/index.ts`, `apps/electron/src/preload/index.ts`, `apps/electron/src/renderer/finagentClient.ts`, `packages/ui/src/client.tsx`
 
-- [ ] Implement the adapter strictly from the Task 1 mapping note; isolate each research run session, expose only business research tools for research prompts, normalize Pi events/errors, and stop work on abort.
-- [ ] Store the Brave API key through main-process encrypted credentials and return configured metadata only; never log or serialize its value.
-- [ ] Compose service and monitor scheduler in `kernelHost`, dispose timers and active runs on app shutdown, and keep monitor retries bounded.
-- [ ] Add runtime-validated IPC handlers and narrow preload wrappers for run lifecycle, reports, traces, metrics, and subscriptions; renderer cannot invoke arbitrary network access.
-- [ ] Test argument validation, credential redaction, IPC failures, disabled/unavailable Pi runtime, cancellation, and session isolation.
-- [ ] Run relevant main/preload tests and Electron typecheck; commit and push `feat: wire business research into electron runtime`.
+- [x] Implement the adapter strictly from the Task 1 mapping note; isolate each research run session, expose only business research tools for research prompts, normalize Pi events/errors, and stop work on abort.
+- [x] Store the Brave API key through main-process encrypted credentials and return configured metadata only; never log or serialize its value.
+- [x] Compose service and monitor scheduler in `kernelHost`, dispose timers and active runs on app shutdown, and keep monitor retries bounded.
+- [x] Add runtime-validated IPC handlers and narrow preload wrappers for run lifecycle, reports, traces, metrics, and subscriptions; renderer cannot invoke arbitrary network access.
+- [x] Test argument validation, credential redaction, IPC failures, disabled/unavailable Pi runtime, cancellation, and session isolation.
+- [x] Run relevant main/preload tests and Electron typecheck; commit and push `feat: wire business research into electron runtime`.
 
 ### Task 8: Build the research workspace and monitoring/evaluation views
 
