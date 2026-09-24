@@ -108,6 +108,23 @@ export type BusinessResearchAction =
   | { kind: 'open_source'; evidenceId: BusinessResearchEvidenceId }
   | { kind: 'finish'; rationale: string };
 
+export interface BusinessResearchEvidence {
+  id: BusinessResearchEvidenceId;
+  sourceId: BusinessResearchSourceId;
+  title: string;
+  url: string;
+  sourceKind: BusinessResearchSourceKind;
+  grade: BusinessResearchEvidenceGrade;
+  query: string;
+  excerpt: string;
+  retrievedAt: string;
+}
+
+export type BusinessResearchObservation =
+  | { kind: 'search_results'; query: string; evidence: BusinessResearchEvidence[] }
+  | { kind: 'source_opened'; evidence: BusinessResearchEvidence }
+  | { kind: 'tool_failure'; actionKind: 'search_web' | 'open_source'; code: string };
+
 type NonEmpty<T> = readonly [T, ...T[]];
 
 /** Claims cannot be rendered as facts without evidence; unresolved items are explicitly not conclusions. */
