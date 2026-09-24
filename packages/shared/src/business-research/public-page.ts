@@ -1,6 +1,8 @@
 import { lookup as dnsLookup } from 'node:dns/promises';
+import type { LookupAddress } from 'node:dns';
 import { request as httpsRequest, type RequestOptions as HttpsRequestOptions } from 'node:https';
 import { BlockList, isIP } from 'node:net';
+import { cleanEvidenceText } from './evidence.ts';
 
 export type PublicPageErrorCode =
   | 'INVALID_URL'
@@ -221,6 +223,28 @@ async function defaultResolveHost(hostname: string): Promise<readonly string[]> 
   return results.map(({ address }) => address);
 }
 
+/** @internal */
+export function createPinnedAddressLookup(address: string): NonNullable<HttpsRequestOptions['lookup']> {
+  const family = isIP(address);
+  if (family === 0) throw new TypeError('A pinned lookup requires an IP address.');
+
+  return ((
+    _hostname: string,
+    options: { all?: boolean },
+    callback: (
+      error: NodeJS.ErrnoException | null,
+      resolvedAddress: string | LookupAddress[],
+      resolvedFamily?: number,
+    ) => void,
+  ) => {
+    if (options.all) {
+      callback(null, [{ address, family }]);
+    } else {
+      callback(null, address, family);
+    }
+  }) as NonNullable<HttpsRequestOptions['lookup']>;
+}
+
 async function requestPinnedHttps(input: PublicPageRequest): Promise<PublicPageResponse> {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -229,11 +253,7 @@ async function requestPinnedHttps(input: PublicPageRequest): Promise<PublicPageR
       settled = true;
       callback();
     };
-    const lookup = ((
-      _hostname: string,
-      _options: unknown,
-      callback: (error: NodeJS.ErrnoException | null, address: string, family: number) => void,
-    ) => callback(null, input.address, isIP(input.address))) as unknown as NonNullable<HttpsRequestOptions['lookup']>;
+    const lookup = createPinnedAddressLookup(input.address);
     const request = httpsRequest(input.url, {
       method: 'GET',
       agent: false,
@@ -313,36 +333,7 @@ function awaitAbortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T>
 }
 
 function htmlToPlainText(value: string): string {
-  return value
-    .replace(/<!--[\s\S]*?-->/gu, ' ')
-    .replace(/<(script|style|noscript|iframe|object|svg)\b[^>]*>[\s\S]*?<\/\1\s*>/giu, ' ')
-    .replace(/<(?:br|hr)\b[^>]*>/giu, ' ')
-    .replace(/<\/(?:p|div|li|h[1-6]|tr|section|article|blockquote)\s*>/giu, ' ')
-    .replace(/<[^>]*>/gu, ' ')
-    .replace(/&(#(?:x[0-9a-f]{1,6}|[0-9]{1,7})|amp|lt|gt|quot|apos|nbsp);/giu, (match, entity: string) => {
-      switch (entity.toLowerCase()) {
-        case 'amp': return '&';
-        case 'lt': return '<';
-        case 'gt': return '>';
-        case 'quot': return '"';
-        case 'apos': return "'";
-        case 'nbsp': return ' ';
-        default: {
-          const numeric = entity.startsWith('#x') || entity.startsWith('#X')
-            ? Number.parseInt(entity.slice(2), 16)
-            : entity.startsWith('#')
-              ? Number.parseInt(entity.slice(1), 10)
-              : Number.NaN;
-          if (!Number.isInteger(numeric) || numeric <= 0 || numeric > 0x10ffff || (numeric >= 0xd800 && numeric <= 0xdfff)) return match;
-          return String.fromCodePoint(numeric);
-        }
-      }
-    })
-    .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/gu, ' ')
-    .replace(/\s+/gu, ' ')
-    .trim()
-    .slice(0, 4_000)
-    .trimEnd();
+  return cleanEvidenceText(value, 4_000);
 }
 
 function publicPageErrorMessage(code: PublicPageErrorCode): string {

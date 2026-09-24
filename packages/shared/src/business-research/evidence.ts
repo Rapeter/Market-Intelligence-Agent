@@ -39,13 +39,8 @@ export function canonicalizeEvidenceUrl(value: unknown): string | undefined {
 /** Converts markup and HTML entities into bounded, inert text for evidence display and prompts. */
 export function cleanEvidenceText(value: unknown, maxLength = 4_000): string {
   if (typeof value !== 'string' || !Number.isInteger(maxLength) || maxLength <= 0) return '';
-  const withoutExecutableRegions = value
-    .replace(/<!--[\s\S]*?-->/gu, ' ')
-    .replace(/<(script|style|noscript|iframe|object|svg)\b[^>]*>[\s\S]*?<\/\1\s*>/giu, ' ')
-    .replace(/<(?:br|hr)\b[^>]*>/giu, ' ')
-    .replace(/<\/(?:p|div|li|h[1-6]|tr|section|article|blockquote)\s*>/giu, ' ')
-    .replace(/<[^>]*>/gu, ' ');
-  const decoded = decodeHtmlEntities(withoutExecutableRegions)
+  const source = value.slice(0, 1_000_000);
+  const decoded = decodeHtmlEntities(stripMarkupLinearly(source))
     .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/gu, ' ')
     .replace(/\s+/gu, ' ')
     .trim();
@@ -72,7 +67,7 @@ export async function createSearchEvidence(
 
   const [sourceId, id] = await Promise.all([
     createId('source', url),
-    createId('evidence', url),
+    createId('evidence', `${url}\u0000${query}\u0000${excerpt}`),
   ]);
   return {
     id,
@@ -132,6 +127,122 @@ function isDisallowedLocalHostname(hostname: string): boolean {
     normalized.includes(':') ||
     /^(?:\d{1,3}\.){3}\d{1,3}$/u.test(normalized)
   );
+}
+
+const RAW_TEXT_ELEMENTS = new Set(['script', 'style', 'noscript', 'iframe', 'object', 'svg']);
+
+/** A bounded linear scanner avoids backtracking on malformed or adversarial HTML. */
+function stripMarkupLinearly(source: string): string {
+  const lower = source.toLowerCase();
+  const output: string[] = [];
+  let cursor = 0;
+  let textStart = 0;
+
+  while (cursor < source.length) {
+    if (source[cursor] !== '<') {
+      cursor += 1;
+      continue;
+    }
+    if (cursor > textStart) output.push(source.slice(textStart, cursor));
+
+    if (lower.startsWith('<!--', cursor)) {
+      const commentEnd = lower.indexOf('-->', cursor + 4);
+      if (commentEnd < 0) return output.join(' ');
+      cursor = commentEnd + 3;
+      output.push(' ');
+      textStart = cursor;
+      continue;
+    }
+
+    const tag = readTag(source, cursor);
+    if (tag === undefined) {
+      output.push('<');
+      cursor += 1;
+      textStart = cursor;
+      continue;
+    }
+    if (!tag.terminated) {
+      if (!tag.closing && tag.name !== undefined && RAW_TEXT_ELEMENTS.has(tag.name)) {
+        return output.join(' ');
+      }
+      output.push(source.slice(cursor));
+      return output.join(' ');
+    }
+
+    if (!tag.closing && tag.name !== undefined && RAW_TEXT_ELEMENTS.has(tag.name)) {
+      const closingStart = findRawClosingTag(lower, tag.end, tag.name);
+      if (closingStart < 0) return output.join(' ');
+      const closing = readTag(source, closingStart);
+      if (closing === undefined || !closing.terminated) return output.join(' ');
+      cursor = closing.end;
+    } else {
+      cursor = tag.end;
+    }
+    output.push(' ');
+    textStart = cursor;
+  }
+
+  if (textStart < source.length) output.push(source.slice(textStart));
+  return output.join(' ');
+}
+
+interface ParsedHtmlTag {
+  name?: string;
+  closing: boolean;
+  end: number;
+  terminated: boolean;
+}
+
+function readTag(source: string, start: number): ParsedHtmlTag | undefined {
+  let cursor = start + 1;
+  if (source[cursor] === '!' || source[cursor] === '?') {
+    const end = findTagEnd(source, cursor + 1);
+    return end < 0
+      ? { closing: false, end: source.length, terminated: false }
+      : { closing: false, end, terminated: true };
+  }
+
+  let closing = false;
+  if (source[cursor] === '/') {
+    closing = true;
+    cursor += 1;
+  }
+  while (cursor < source.length && /\s/u.test(source[cursor]!)) cursor += 1;
+  const nameStart = cursor;
+  while (cursor < source.length && /[a-zA-Z0-9:-]/u.test(source[cursor]!)) cursor += 1;
+  if (cursor === nameStart) return undefined;
+  const name = source.slice(nameStart, cursor).toLowerCase();
+  const end = findTagEnd(source, cursor);
+  return end < 0
+    ? { name, closing, end: source.length, terminated: false }
+    : { name, closing, end, terminated: true };
+}
+
+function findTagEnd(source: string, start: number): number {
+  let quote: '"' | "'" | undefined;
+  for (let cursor = start; cursor < source.length; cursor += 1) {
+    const character = source[cursor];
+    if (quote !== undefined) {
+      if (character === quote) quote = undefined;
+    } else if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === '>') {
+      return cursor + 1;
+    }
+  }
+  return -1;
+}
+
+function findRawClosingTag(sourceLower: string, start: number, name: string): number {
+  const needle = `</${name}`;
+  let from = start;
+  while (true) {
+    const match = sourceLower.indexOf(needle, from);
+    if (match < 0) return -1;
+    const boundary = sourceLower[match + needle.length];
+    if (boundary === undefined || /[\s/>]/u.test(boundary)) return match;
+    from = match + needle.length;
+  }
 }
 
 function decodeHtmlEntities(value: string): string {

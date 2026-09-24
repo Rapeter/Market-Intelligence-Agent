@@ -67,7 +67,6 @@ export function createBraveBusinessResearchTools(
   const maxResponseBytes = options.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
   const apiKey = typeof options.apiKey === 'string' ? options.apiKey.trim() : '';
   const evidenceById = new Map<BusinessResearchEvidenceId, BusinessResearchEvidence>();
-  const evidenceIdByUrl = new Map<string, BusinessResearchEvidenceId>();
 
   return {
     async searchWeb(query, signal) {
@@ -101,15 +100,24 @@ export function createBraveBusinessResearchTools(
       }
 
       if (response.status === 401 || response.status === 403) {
+        await discardResponseBody(response);
         throw new BraveBusinessResearchError('AUTHENTICATION_FAILED');
       }
-      if (response.status === 429) throw new BraveBusinessResearchError('RATE_LIMITED');
-      if (response.status >= 500) throw new BraveBusinessResearchError('PROVIDER_UNAVAILABLE');
+      if (response.status === 429) {
+        await discardResponseBody(response);
+        throw new BraveBusinessResearchError('RATE_LIMITED');
+      }
+      if (response.status >= 500) {
+        await discardResponseBody(response);
+        throw new BraveBusinessResearchError('PROVIDER_UNAVAILABLE');
+      }
       if (response.status < 200 || response.status >= 300) {
+        await discardResponseBody(response);
         throw new BraveBusinessResearchError('PROVIDER_ERROR');
       }
       const contentType = response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase();
       if (contentType !== 'application/json' && !contentType?.endsWith('+json')) {
+        await discardResponseBody(response);
         throw new BraveBusinessResearchError('INVALID_RESPONSE');
       }
 
@@ -126,12 +134,11 @@ export function createBraveBusinessResearchTools(
       const retrievedAt = now().toISOString();
       const found: BusinessResearchEvidence[] = [];
       const seenUrls = new Set<string>();
-      for (const result of results) {
+      for (const result of results.slice(0, resultCount)) {
         const fields = readSearchResult(result);
         if (fields === undefined) continue;
         const url = canonicalizeEvidenceUrl(fields.url);
         if (url === undefined || seenUrls.has(url)) continue;
-        seenUrls.add(url);
         let sourceKind: BusinessResearchSourceKind = 'other_public';
         try {
           const candidate = options.classifySourceKind?.(new URL(url)) ?? sourceKind;
@@ -148,10 +155,10 @@ export function createBraveBusinessResearchTools(
           sourceKind,
         });
         if (created === undefined) continue;
-        const previousId = evidenceIdByUrl.get(url);
-        const evidence = previousId === undefined ? created : { ...created, id: previousId };
+        seenUrls.add(url);
+        const previous = evidenceById.get(created.id);
+        const evidence = previous?.grade === 'page_text' ? previous : created;
         evidenceById.set(evidence.id, evidence);
-        evidenceIdByUrl.set(url, evidence.id);
         found.push(evidence);
       }
       return found;
@@ -164,8 +171,6 @@ export function createBraveBusinessResearchTools(
       const page = await pageReader.read(existing.url, signal);
       const upgraded = await upgradeEvidenceToPageText(existing, page.text, now().toISOString(), page.finalUrl);
       evidenceById.set(evidenceId, upgraded);
-      const finalUrl = canonicalizeEvidenceUrl(page.finalUrl);
-      if (finalUrl !== undefined) evidenceIdByUrl.set(finalUrl, evidenceId);
       return upgraded;
     },
   };
@@ -227,6 +232,14 @@ async function readBoundedText(response: Response, maxBytes: number, signal: Abo
   }
   const text = new TextDecoder('utf-8', { fatal: false });
   return chunks.map((chunk) => text.decode(chunk, { stream: true })).join('') + text.decode();
+}
+
+async function discardResponseBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // Error response bodies are intentionally ignored; cancellation is only resource cleanup.
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

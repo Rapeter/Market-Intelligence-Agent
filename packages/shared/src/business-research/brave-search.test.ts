@@ -67,6 +67,21 @@ describe('Brave business research tools', () => {
     });
   });
 
+  it('allows a valid duplicate URL when an earlier result for that URL is malformed', async () => {
+    const tools = createBraveBusinessResearchTools({
+      apiKey: 'brave-test-secret-value',
+      fetchImpl: async () => jsonResponse({ web: { results: [
+        { title: '', url: 'https://example.com/update', description: 'Malformed result.' },
+        { title: 'Valid update', url: 'https://example.com/update#latest', description: 'Usable evidence.' },
+      ] } }),
+    });
+
+    const results = await tools.searchWeb('EV update', new AbortController().signal);
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ title: 'Valid update', excerpt: 'Usable evidence.' });
+  });
+
   it('opens only evidence discovered by this tool instance and preserves the stable evidence id', async () => {
     const pageResponse: PublicPageResponse = {
       status: 200,
@@ -100,6 +115,58 @@ describe('Brave business research tools', () => {
     );
   });
 
+  it('preserves upgraded page evidence and keeps redirect aliases from reusing another URL identity', async () => {
+    let useRedirectedUrl = false;
+    const tools = createBraveBusinessResearchTools({
+      apiKey: 'brave-test-secret-value',
+      fetchImpl: async () => jsonResponse({ web: { results: [{
+        title: 'Range',
+        url: useRedirectedUrl ? 'https://final.example/range' : 'https://origin.example/range',
+        description: 'Claimed range.',
+      }] } }),
+      readPage: { async read() {
+        return { finalUrl: 'https://final.example/range', text: 'Verified range.', contentType: 'text/html' };
+      } },
+      now: () => new Date('2026-09-24T00:00:00.000Z'),
+    });
+    const [discovered] = await tools.searchWeb('EV range', new AbortController().signal);
+    if (discovered === undefined) throw new Error('Expected one search result');
+    const opened = await tools.openSource(discovered.id, new AbortController().signal);
+    useRedirectedUrl = true;
+
+    const [redirectedSearch] = await tools.searchWeb('EV range', new AbortController().signal);
+    if (redirectedSearch === undefined) throw new Error('Expected one result for the final URL');
+
+    expect(opened.id).toBe(discovered.id);
+    expect(opened.grade).toBe('page_text');
+    expect(redirectedSearch.id).not.toBe(opened.id);
+    expect(redirectedSearch.sourceId).toBe(opened.sourceId);
+    expect(redirectedSearch.grade).toBe('search_excerpt');
+  });
+
+  it('caps parsed results to the requested count and preserves a verified item on an identical later search', async () => {
+    const tools = createBraveBusinessResearchTools({
+      apiKey: 'brave-test-secret-value',
+      resultCount: 1,
+      fetchImpl: async () => jsonResponse({ web: { results: [
+        { title: 'First', url: 'https://example.com/first', description: 'First result.' },
+        { title: 'Excess', url: 'https://example.com/excess', description: 'Must not be admitted.' },
+      ] } }),
+      readPage: { async read(url) {
+        return { finalUrl: url, text: 'Verified first result.', contentType: 'text/html' };
+      } },
+    });
+    const first = await tools.searchWeb('EV result', new AbortController().signal);
+    const verified = await tools.openSource(first[0]!.id, new AbortController().signal);
+    const repeated = await tools.searchWeb('EV result', new AbortController().signal);
+
+    expect(first).toHaveLength(1);
+    expect(repeated).toHaveLength(1);
+    expect(repeated[0]?.id).toBe(verified.id);
+    expect(repeated[0]?.grade).toBe('page_text');
+    expect(repeated[0]?.excerpt).toBe('Verified first result.');
+  });
+
   it('maps authentication, rate-limit, provider, and malformed-response failures to safe stable codes', async () => {
     for (const [status, expectedCode] of [
       [401, 'AUTHENTICATION_FAILED'],
@@ -110,7 +177,14 @@ describe('Brave business research tools', () => {
         apiKey: 'brave-test-secret-value',
         fetchImpl: async () => new Response('{"error":{"detail":"do not echo provider body"}}', { status }),
       });
-      await expectCode(tools.searchWeb('EV research', new AbortController().signal), expectedCode);
+      try {
+        await tools.searchWeb('EV research', new AbortController().signal);
+        throw new Error(`Expected ${expectedCode}`);
+      } catch (error) {
+        expect(error).toMatchObject({ code: expectedCode });
+        expect(error instanceof Error ? error.message : '').not.toContain('do not echo provider body');
+        expect(error instanceof Error ? error.message : '').not.toContain('brave-test-secret-value');
+      }
     }
 
     const malformed = createBraveBusinessResearchTools({
@@ -118,6 +192,20 @@ describe('Brave business research tools', () => {
       fetchImpl: async () => new Response('{broken', { status: 200, headers: { 'content-type': 'application/json' } }),
     });
     await expectCode(malformed.searchWeb('EV research', new AbortController().signal), 'INVALID_RESPONSE');
+  });
+
+  it('cancels provider error bodies rather than buffering remote diagnostics', async () => {
+    let cancelled = false;
+    const tools = createBraveBusinessResearchTools({
+      apiKey: 'brave-test-secret-value',
+      fetchImpl: async () => new Response(new ReadableStream({
+        cancel() { cancelled = true; },
+        start(controller) { controller.enqueue(new TextEncoder().encode('remote private diagnostic')); },
+      }), { status: 429 }),
+    });
+
+    await expectCode(tools.searchWeb('EV research', new AbortController().signal), 'RATE_LIMITED');
+    expect(cancelled).toBe(true);
   });
 
   it('rejects an empty key without contacting Brave and bounds provider response bodies', async () => {
@@ -135,7 +223,12 @@ describe('Brave business research tools', () => {
     const tooLarge = createBraveBusinessResearchTools({
       apiKey: 'brave-test-secret-value',
       maxResponseBytes: 8,
-      fetchImpl: async () => jsonResponse({ web: { results: [] } }),
+      fetchImpl: async () => new Response(new ReadableStream({
+        start(controller) {
+          controller.enqueue(new Uint8Array(5));
+          controller.enqueue(new Uint8Array(5));
+        },
+      }), { headers: { 'content-type': 'application/json' } }),
     });
     await expectCode(tooLarge.searchWeb('EV research', new AbortController().signal), 'RESPONSE_TOO_LARGE');
   });
