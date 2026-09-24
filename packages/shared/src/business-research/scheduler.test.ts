@@ -98,6 +98,23 @@ describe('BusinessResearchScheduler', () => {
     expect((await app.repository.getSubscription(subscription.id))?.nextCheckAt).toBe(app.clock.now + HOUR);
   });
 
+  it('preserves the configured fixture mode for monitor-triggered research', async () => {
+    const app = harness(async () => [source('body-v1')]);
+    app.scheduler = new BusinessResearchScheduler(app.repository, app.service, {
+      probe: async () => [source('body-v1')],
+      now: () => app.clock.now,
+      runMode: 'fixture',
+    });
+    const subscription = await app.service.subscribe(taskInput(), { intervalMs: HOUR });
+    app.clock.now += HOUR;
+
+    const [check] = await app.scheduler.checkDue();
+    expect(check?.runId).toBeDefined();
+    await app.service.waitForRun(check!.runId!);
+
+    expect((await app.service.getRun(check!.runId!))?.mode).toBe('fixture');
+  });
+
   it('aborts an in-flight public monitor probe when the scheduler stops', async () => {
     const entered = deferred();
     const app = harness(({ signal }) => new Promise((_, reject) => {

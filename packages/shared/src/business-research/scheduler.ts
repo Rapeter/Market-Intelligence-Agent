@@ -3,6 +3,7 @@ import {
   parseBusinessResearchId,
   type BusinessResearchIdKind,
   type BusinessResearchRunId,
+  type BusinessResearchRunMode,
   type BusinessResearchSubscriptionId,
 } from '@finagent/core';
 import { createCodeError } from '../agent/errors.ts';
@@ -25,6 +26,8 @@ export interface BusinessResearchMonitorProbeInput {
 
 export interface BusinessResearchSchedulerOptions {
   probe: (input: BusinessResearchMonitorProbeInput) => Promise<BusinessResearchMonitorSourceSnapshot[]>;
+  /** Defaults to live; fixture mode is for deterministic verification only. */
+  runMode?: BusinessResearchRunMode;
   now?: () => number;
   idFactory?: (kind: BusinessResearchIdKind, sequence: number) => string;
 }
@@ -154,7 +157,10 @@ export class BusinessResearchScheduler {
           runId = reservedRunId;
           if (existingRun === undefined) {
             try {
-              await this.service.start(subscription.task, { runId: reservedRunId });
+              await this.service.start(subscription.task, {
+                runId: reservedRunId,
+                mode: this.options.runMode ?? 'live',
+              });
             } catch {
               decision = { kind: 'skip', reason: 'check_failed' };
               runId = undefined;
