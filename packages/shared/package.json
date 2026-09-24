@@ -13,7 +13,7 @@
     "./compare": "./src/compare/index.ts",
     "./portfolio-risk": "./src/portfolio-risk/index.ts",
     "./portfolio-import": "./src/portfolio-import/index.ts",
-    "./business-research": "./src/business-research/catalog.ts",
+    "./business-research": "./src/business-research/index.ts",
     "./diagnostics": "./src/diagnostics/index.ts",
     "./providers/longbridge": "./src/providers/longbridge/index.ts",
     "./providers/massive": "./src/providers/massive/index.ts"
