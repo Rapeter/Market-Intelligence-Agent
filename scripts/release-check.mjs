@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Folio release gate runner (spec §39, §69).
+// Market Intelligence Agent release gate runner (spec §39, §69).
 //
 //   bun run release:check
 //

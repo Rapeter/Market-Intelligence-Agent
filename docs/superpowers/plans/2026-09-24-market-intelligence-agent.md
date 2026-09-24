@@ -43,10 +43,10 @@
 - The mapping note records `DecisionModelPort.decide(state, signal)` to the existing `PiRpcClient.promptStreaming` / isolated session path, tool schema registration, event normalization, cancellation, provider-error normalization, and the usage-metadata limitation.
 - Keep existing package aliases when renaming the root product. The main product name becomes `Market Intelligence Agent`; inherited Folio attribution is explicit.
 
-- [ ] Read the installed Pi package version, `PiRpcClient.promptStreaming`, `PiRuntimeAdapter`, and the Folio extension tool registry; add the concrete mapping note before writing an adapter.
-- [ ] Rewrite README feature claims around public evidence research, scope, limitations, setup, screenshots, evaluations, and Folio contribution history; keep Chinese and English descriptions aligned.
-- [ ] Update desktop product name and app id without changing internal workspace import names; assert About/release metadata.
-- [ ] Run `bun test apps/electron/src/main/about.test.ts` and metadata checks; commit `docs: establish market intelligence product identity` and push.
+- [x] Read the installed Pi package version, `PiRpcClient.promptStreaming`, `PiRuntimeAdapter`, and the Folio extension tool registry; add the concrete mapping note before writing an adapter.
+- [x] Rewrite README feature claims around public evidence research, scope, limitations, setup, evaluations, and Folio contribution history; keep Chinese and English descriptions aligned. Add real screenshots in Task 9 after the workflow UI exists.
+- [x] Update desktop product name and app id without changing internal workspace import names; assert About/release metadata.
+- [x] Run `bun test apps/electron/src/main/about.test.ts`, Electron typecheck, and release metadata/syntax checks; commit `docs: establish market intelligence product identity` and push.
 
 ### Task 2: Define business-research contracts and the six task / three strategy catalog
 

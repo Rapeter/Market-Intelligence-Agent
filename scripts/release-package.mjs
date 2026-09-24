@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Folio release packaging (spec §38).
+// Market Intelligence Agent release packaging (spec §38).
 //
 //   bun run release:package
 //
@@ -60,14 +60,18 @@ if (signingEnabled) {
   builderEnv.CSC_IDENTITY_AUTO_DISCOVERY = 'true';
 }
 
-// Bake the exact git SHA + channel into the packed package.json (folio.buildSha
-// / folio.channel) so the About view reports real values at runtime without a
+// Bake the exact git SHA + channel into the packed package.json
+// (marketIntelligenceAgent.buildSha / marketIntelligenceAgent.channel) so the About view reports real values at runtime without a
 // build-time env var. CI injects both; local builds keep the source values.
 if (process.env.FINAGENT_BUILD_SHA) {
-  builderArgs.push(`--config.extraMetadata.folio.buildSha=${process.env.FINAGENT_BUILD_SHA}`);
+  builderArgs.push(
+    `--config.extraMetadata.marketIntelligenceAgent.buildSha=${process.env.FINAGENT_BUILD_SHA}`
+  );
 }
 if (process.env.FINAGENT_CHANNEL) {
-  builderArgs.push(`--config.extraMetadata.folio.channel=${process.env.FINAGENT_CHANNEL}`);
+  builderArgs.push(
+    `--config.extraMetadata.marketIntelligenceAgent.channel=${process.env.FINAGENT_CHANNEL}`
+  );
 }
 
 run('bun', ['run', 'package:builder', ...builderArgs], electronRoot, builderEnv);

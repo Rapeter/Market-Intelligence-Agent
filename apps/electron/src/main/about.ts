@@ -10,17 +10,18 @@ export interface AboutInfo {
 }
 
 /**
- * Release channel for this build. `folio.channel` in apps/electron/package.json
- * is the declared source of truth (`internal` | `beta` | `stable`); it is baked
+ * Release channel for this build. `marketIntelligenceAgent.channel` in
+ * apps/electron/package.json is the declared source of truth (`internal` |
+ * `alpha` | `beta` | `stable`); it is baked
  * into the packed app via extraMetadata and read here at runtime. `FINAGENT_CHANNEL`
  * overrides it (CI emits `internal` for unsigned builds).
  */
-const DEFAULT_CHANNEL = 'beta';
+const DEFAULT_CHANNEL = 'alpha';
 
-function readFolioField(field: string): string | undefined {
+function readProductField(field: string): string | undefined {
   try {
     const pkg = JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8'));
-    const value = pkg?.folio?.[field];
+    const value = pkg?.marketIntelligenceAgent?.[field];
     if (typeof value === 'string' && value.length > 0) return value;
   } catch {
     // Dev entry may point at src/main; fall through to env/default.
@@ -29,13 +30,13 @@ function readFolioField(field: string): string | undefined {
 }
 
 function readChannel(): string {
-  return process.env.FINAGENT_CHANNEL ?? readFolioField('channel') ?? DEFAULT_CHANNEL;
+  return process.env.FINAGENT_CHANNEL ?? readProductField('channel') ?? DEFAULT_CHANNEL;
 }
 
 function readBuildSha(): string {
-  // CI bakes the exact git SHA via extraMetadata (`folio.buildSha`); a local or
+  // CI bakes the exact git SHA via extraMetadata (`marketIntelligenceAgent.buildSha`); a local or
   // dev build reports `dev`.
-  return process.env.FINAGENT_BUILD_SHA ?? readFolioField('buildSha') ?? 'dev';
+  return process.env.FINAGENT_BUILD_SHA ?? readProductField('buildSha') ?? 'dev';
 }
 
 /**

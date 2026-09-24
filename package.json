@@ -1,6 +1,6 @@
 {
-  "name": "finagent",
-  "version": "0.4.0-beta.2",
+  "name": "market-intelligence-agent",
+  "version": "0.1.0-alpha.1",
   "private": true,
   "workspaces": [
     "apps/*",

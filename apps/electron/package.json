@@ -1,9 +1,9 @@
 {
   "name": "@finagent/electron",
-  "version": "0.4.0-beta.2",
+  "version": "0.1.0-alpha.1",
   "private": true,
-  "folio": {
-    "channel": "beta"
+  "marketIntelligenceAgent": {
+    "channel": "alpha"
   },
   "type": "module",
   "main": "./src/main/index.js",
@@ -53,8 +53,8 @@
     "electron": "^39.0.0"
   },
   "build": {
-    "appId": "com.finagent.app",
-    "productName": "Folio",
+    "appId": "com.rapeter.marketintelligenceagent",
+    "productName": "Market Intelligence Agent",
     "directories": {
       "output": "../../dist/electron"
     },
