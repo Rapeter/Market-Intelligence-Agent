@@ -7,13 +7,15 @@
   ],
   "snapshotSource": "apps/electron/e2e/fixtures/business-research",
   "networkRequests": 0,
+  "projectId": "project-monitor-fixture-1",
   "probeCalls": 3,
   "researchRunsPersisted": 2,
+  "triggeredRunsRetainProject": true,
   "checksPersisted": 3,
   "duplicateSuppressed": true,
   "elapsedMs": [
-    53,
-    40,
+    51,
+    37,
     4
   ],
   "checks": [
@@ -24,7 +26,7 @@
       "reason": "new_source",
       "runMode": "fixture",
       "runId": "run-monitor-check-1",
-      "elapsedMs": 53
+      "elapsedMs": 51
     },
     {
       "snapshotId": "northstar-update-v2",
@@ -33,7 +35,7 @@
       "reason": "source_updated",
       "runMode": "fixture",
       "runId": "run-monitor-check-2",
-      "elapsedMs": 40
+      "elapsedMs": 37
     },
     {
       "snapshotId": "northstar-update-v1",

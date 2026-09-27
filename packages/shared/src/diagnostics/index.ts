@@ -8,7 +8,6 @@ export {
 } from './redact.ts';
 export {
   collectDiagnostics,
-  type CollectDiagnosticsOptions,
 } from './collector.ts';
 export {
   serializeSupportBundle,
@@ -18,5 +17,4 @@ export type {
   DiagnosticsBundle,
   DiagnosticsInput,
   ErrorLogEntry,
-  FinancialProviderSummary,
 } from './types.ts';

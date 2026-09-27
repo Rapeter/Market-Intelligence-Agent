@@ -1,178 +1,28 @@
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
-import { isAbsolute, join, relative, sep } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { spawn } from 'node:child_process';
-import { app, Notification, shell, type BrowserWindow } from 'electron';
+import { realpathSync } from 'node:fs';
+import { unlink } from 'node:fs/promises';
+import { isAbsolute, join } from 'node:path';
+import { app } from 'electron';
 import type {
-  AgentEvent,
-  AlertRule,
-  AlertTriggerEvent,
-  ApiResult,
-  CapabilityRegistry,
-  Comparison,
+  AppPreferencesSnapshot,
+  BusinessResearchProjectId,
+  BusinessResearchReportId,
+  BusinessResearchRunId,
+  BusinessResearchSubscriptionId,
+  BusinessResearchIdKind,
   CredentialInfo,
   CustomProviderConfig,
-  FinancialProviderStatus,
-  InvestmentThesis,
   LlmModel,
   LlmRuntimeState,
   LlmTestResult,
-  Message,
-  PortfolioRiskReport,
-  ProviderCoverage,
-  ProviderHealth,
   ProviderStatus,
-  ResearchReport,
-  ResearchRunSummary,
-  ResearchSynthesis,
-  ResearchSynthesisInput,
-  Run,
-  ScreeningRun,
-  ScreeningQuery,
-  ScreeningStrategy,
-  ResearchDiff,
-  ResearchOpinion,
-  ResearchOutcome,
-  PortfolioImportDraft,
-  PortfolioImportRow,
-  ManualPortfolio,
-  ImportSource,
-  Holding,
-  Kline,
-  AutomationRule,
-  AutomationRun,
-  NotificationEvent,
-  SkillPerformance,
-  StrategyPerformance,
-  SkillCalibration,
-  StrategyCalibration,
-  PortfolioSnapshot,
-  SessionMeta,
-  SkillReadiness,
-  ThesisImpact,
-  ThesisImpactInput,
-  ToolDefinition,
-  WorkspaceContext,
-  StrategyId,
-  AgentEventPayload,
-  ApiError,
-  AppPreferencesSnapshot,
-  SupportedLocale,
-  EvaluationBaseline,
-  EvaluationCase,
-  EvaluationExperiment,
-  EvaluationResultRecord,
-  EvaluationRun,
-  EvaluationRunStatus,
-  EvaluationSettings,
-  LangSmithConnectionStatus,
-  LangfuseConnectionStatus,
-  PrivacyLevel,
-  ToolCall,
-  ToolCallRecord,
-  TraceReference,
-  BusinessResearchRunId,
-  BusinessResearchReportId,
-  BusinessResearchSubscriptionId,
-  BusinessResearchIdKind,
-  BusinessResearchRunMode,
 } from '@finagent/core';
 import {
-  DEFAULT_INSTRUMENT_CATALOG,
-  InstrumentResolver,
   isBusinessResearchRunMode,
   normalizeBusinessResearchInput,
   parseBusinessResearchId,
-  STRATEGY_IDS,
 } from '@finagent/core';
 import { isLocalePreference } from '@finagent/i18n';
-import { createAppPreferencesService, type AppPreferencesService } from './app-preferences.ts';
-import { buildImpactPrompt, buildRiskSummaryPrompt, buildSynthesisPrompt } from './research-prompts.ts';
-import {
-  AgentKernel,
-  AlertEngine,
-  AlertEventLog,
-  AlertRuleRepository,
-  buildComparison,
-  CapabilityExecutor,
-  computeSkillReadiness,
-  createAgentEvaluator,
-  createFullRegistry,
-  createLocalThesisEvaluator,
-  createRouterFetchers,
-  ConnectionStore,
-  InstrumentCatalogStore,
-  defaultPortfolioRiskSynthesizer,
-  FinanceToolRegistry,
-  JsonFileStore,
-  LocalResearchSynthesizer,
-  MarketDataService,
-  MassiveFinancialDataProvider,
-  parseImpactJson,
-  parseSynthesisJson,
-  PortfolioRiskService,
-  ProviderRouter,
-  ResearchReportRepository,
-  ResearchService,
-  ThesisImpactRepository,
-  ThesisRepository,
-  ThesisService,
-  type AnyProvider,
-  type PortfolioRiskSynthesisInput,
-  OutcomeRepository,
-  OutcomeService,
-  PulseService,
-  PerformanceService,
-  AutomationRuleRepository,
-  AutomationRunRepository,
-  ScreeningService,
-  ScreeningRunRepository,
-  SCREENING_STRATEGIES,
-  ResearchDiffRepository,
-  ManualPortfolioRepository,
-  buildDiff,
-  buildBrief,
-  runAutomation,
-  runDue,
-  DEFAULT_BRIEF_HOUR,
-  THESIS_REVIEW_DAY,
-  THESIS_REVIEW_HOUR,
-  WEEKDAYS,
-  createDraft,
-  parseCsv,
-  parsePaste,
-  reportToMarkdown,
-  reportToShareCard,
-  redactForShare,
-  computeSkillCalibrations,
-  computeStrategyCalibrations,
-  EvaluationStore,
-  TraceCorrelationService,
-  resolveBackend,
-  resolveLangfuseBackend,
-  LangfuseEvaluationBackend,
-  serializeLangfuseCredential,
-  scoresFromAgentRun,
-  scoresFromResearchReport,
-  currentFolioVersion,
-  EvaluationRedactor,
-  PiRuntimeAdapter,
-  PiRpcClient,
-  sanitizeSettings,
-  embeddedDatasets,
-  isRecord,
-  type EvaluationBackend,
-  type EvaluationBackendKind,
-  type HistoryFetcher,
-  type HumanFeedback,
-  type DailyBrief,
-  type BriefPortfolioSummary,
-  type MarketPulseSnapshot,
-  type ShareCard,
-  type StreamReplayResult,
-  type WatchlistQuote,
-  withDemoDataFallback,
-} from '@finagent/shared';
 import {
   BusinessResearchRepository,
   BusinessResearchScheduler,
@@ -187,349 +37,73 @@ import {
   type BusinessResearchMonitorSourceSnapshot,
   type PiBusinessResearchAdapter,
 } from '@finagent/shared/business-research';
+import { createCodeError } from '@finagent/shared/agent/errors';
+import { PiRpcClient } from '@finagent/shared/agent/pi-rpc-client';
+import { JsonFileStore } from '@finagent/shared/storage/json-file-store';
+import { getPiCwd, getPiExtensionEntry, getRuntimeRoot } from '@finagent/shared/resources';
+import { collectDiagnostics, type DiagnosticsBundle } from '@finagent/shared/diagnostics';
+import { createAppPreferencesService, type AppPreferencesService } from './app-preferences.ts';
 import {
-  LongbridgeBrokerAccountProvider,
-  LongbridgeFinancialDataProvider,
-  logout as longbridgeLogout,
-  startLogin,
-  testConnection as longbridgeTestConnection,
-  type LongbridgeExec,
-  type SpawnFn,
-} from '@finagent/shared/providers/longbridge';
-import { SkillHub, skillCapabilityMap } from '@finagent/skill-hub';
+  BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID,
+  CredentialStore,
+  redactSecrets,
+} from './credentialStore.ts';
 import {
-  getPiCwd,
-  getPiExtensionEntry,
-  getLangSmithExtensionEntry,
-  getRuntimeRoot,
-  getSkillsDir,
-  listBundledPiExtensions,
-} from '@finagent/shared/resources';
-import {
-  collectDiagnostics,
-  ErrorLog,
-  type DiagnosticsBundle,
-  type FinancialProviderSummary,
-} from '@finagent/shared/diagnostics';
-import { BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID, CredentialStore, redactSecrets } from './credentialStore.ts';
-import { runBusinessResearchLiveCounterfactuals } from './businessResearchLiveE2e.ts';
+  runBusinessResearchLiveCounterfactuals,
+  summarizeLiveMonitorFollowUpRun,
+} from './businessResearchLiveE2e.ts';
+import { retryTransientMonitorProbe } from './businessResearchMonitorRetry.ts';
+import { resolveBundledPiCliEntry } from './piRuntime.ts';
 import { isBusinessResearchLiveE2eEnabled } from '../businessResearchLiveE2eMode.ts';
-import { executeLongBridge } from '@finagent/longbridge-tools';
+import { mainErrorLog } from './ipcResult.ts';
 
-/** Renderer-facing mirror of the Connections IPC contract (ui/client/connections.ts). */
-interface ConnectionEntry {
-  providerId: string;
-  kind: 'financial-data' | 'broker-account';
-  name: string;
-  status: FinancialProviderStatus;
-  health: ProviderHealth | null;
-  coverage: ProviderCoverage | null;
-  configurable: boolean;
-  configured: boolean;
-  hasAccount: boolean;
-  accountLabel: string | null;
-  error: { code: string; message: string } | null;
-  enabled: boolean;
-  endpoint: string | null;
-  region: string | null;
-  routingRole: 'primary' | 'fallback' | null;
-  recentResult: ReturnType<ProviderRouter['lastResultFor']> | null;
-}
+const DEFAULT_THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 
-const MASSIVE_CREDENTIAL_ID = 'financial:massive';
-const DEFAULT_PROVIDER_ROUTING = { primary: 'longbridge', fallback: 'massive' } as const;
-
-type IpcSuccess<T> = { ok: true; data: T };
-
-type IpcFailure = {
-  ok: false;
-  error: {
-    code: string;
-    message: string;
-    action?: string;
-  };
-};
-
-export type IpcResult<T> = IpcSuccess<T> | IpcFailure;
-
-interface KlineRequest {
-  symbol: string;
-  period?: '1m' | '5m' | '15m' | '1h' | '1d' | '1w';
-  limit?: number;
-}
-
-interface StartRunRequest {
-  sessionId: string;
-  content: string;
-  workspaceContext?: WorkspaceContext;
-}
-
-/** Experiment id for runs observed outside explicit evaluation experiments. */
-const OBSERVABILITY_EXPERIMENT_ID = '__observability__';
-
-interface PendingEvalRun {
-  sessionId: string;
-  startedAt: number;
-  toolCalls: ToolCall[];
-  answer: string;
-  input?: string;
-  error?: ApiError;
-}
-
-/**
- * Main-process bridge between the renderer and the agent kernel.
- *
- * Sessions, runs, and agent events live in the kernel; the window only sees
- * the whitelisted IPC surface and the `agent:event` push channel. LLM control
- * and credentials are routed through here as well — secrets never leave the
- * main process.
- */
 export class AgentKernelHost {
-  private readonly marketData: MarketDataService;
-  private readonly kernel: AgentKernel;
   private readonly credentials: CredentialStore;
-  private readonly skillHub: SkillHub;
-  /** Full Folio V3 capability registry: agent tools + UI + product workflows. */
-  private readonly registry: CapabilityRegistry;
-  private readonly executor: CapabilityExecutor;
-  private readonly researchService: ResearchService;
   private readonly businessResearchRepository: BusinessResearchRepository;
   private readonly businessResearchService: BusinessResearchService;
   private readonly businessResearchScheduler: BusinessResearchScheduler;
   private readonly businessResearchPiRpc?: PiRpcClient;
   private readonly businessResearchAdapter?: PiBusinessResearchAdapter;
-  private readonly outcomeRepository: OutcomeRepository;
-  private readonly outcomeService: OutcomeService;
-  private readonly screeningService: ScreeningService;
-  private readonly diffRepository: ResearchDiffRepository;
-  private readonly importRepository: ManualPortfolioRepository;
-  private readonly pulseService: PulseService;
-  private readonly performanceService: PerformanceService;
-  private readonly automationRules: AutomationRuleRepository;
-  private readonly automationRuns: AutomationRunRepository;
-  private automationTimer: ReturnType<typeof setInterval> | null = null;
-  private readonly lastAutomationRunByRule = new Map<string, string>();
-  private readonly thesisRepository: ThesisRepository;
-  private readonly thesisService: ThesisService;
-  private readonly alertRepository: AlertRuleRepository;
-  private readonly alertEventLog: AlertEventLog;
-  private readonly alertEngine: AlertEngine;
-  private readonly portfolioRisk: PortfolioRiskService;
-  private readonly connectionStore: ConnectionStore;
-  private readonly providerRouter: ProviderRouter;
-  private instrumentResolver: InstrumentResolver;
-  private activeLogin: { cancel: () => void } | null = null;
-  private unsubscribe: (() => void) | null = null;
-  private streamUnsubscribe: (() => void) | null = null;
-  private connectionsUnsubscribe: (() => void) | null = null;
-  private window: BrowserWindow | null = null;
-
-  // V7 evaluation & observability (spec §15, §52-55, §62-63).
-  private readonly evaluationStore: EvaluationStore;
-
-  /** V8: main-owned locale preference (independent of any single store). */
   private readonly appPreferences: AppPreferencesService;
-  private evaluationSettings: EvaluationSettings;
-  private evaluationBackend: EvaluationBackend;
-  private langfuseBackend: LangfuseEvaluationBackend | undefined;
-  private evaluationRedactor: EvaluationRedactor;
-  private traceCorrelation: TraceCorrelationService;
-  private readonly evalRuns = new Map<string, PendingEvalRun>();
-  private unsubscribeEval: (() => void) | null = null;
+  private readonly provider: 'local' | 'pi-runtime';
 
   constructor() {
-    // Resource paths come from ResourceLocator: the repo root in dev, the app
-    // Resources dir when packaged. The Pi runtime resolves its extension path
-    // relative to the spawn cwd (getPiCwd), so both are wired through it.
-    // FINAGENT_PI_EXTENSION lets readDefaultPiArgs() supply the correct
-    // --extension without duplicating the default arg list.
+    this.provider = process.env.FINAGENT_AGENT_PROVIDER === 'local' ? 'local' : 'pi-runtime';
     process.env.FINAGENT_PI_EXTENSION = getPiExtensionEntry();
-    this.credentials = new CredentialStore(join(app.getPath('userData'), 'credentials.json'));
-    this.skillHub = new SkillHub({
-      skillsDirectory: getSkillsDir(),
-      stateFile: join(app.getPath('userData'), 'skills-state.json'),
-    });
 
-    const provider = readAgentProvider();
     const userData = app.getPath('userData');
-
-    // V8: main-owned app preferences (locale), resolved against the OS locale.
+    this.credentials = new CredentialStore(join(userData, 'credentials.json'));
     this.appPreferences = createAppPreferencesService(new JsonFileStore(userData), () => app.getLocale());
 
-    // V4 provider platform: the capability registry is built on top of the
-    // provider router, which owns the Longbridge (primary) and Massive
-    // (fallback) adapters. Business layers see only the neutral capability
-    // surface — vendor specifics stay inside the adapters.
-    this.connectionStore = new ConnectionStore(new JsonFileStore(userData));
-    this.providerRouter = new ProviderRouter({
-      resolveRouting: () => this.connectionStore.getRouting(DEFAULT_PROVIDER_ROUTING),
-      isEnabled: async (providerId) =>
-        (await this.connectionStore.getConfig(providerId))?.enabled !== false,
-    });
-    const longbridgeData = new LongbridgeFinancialDataProvider();
-    const longbridgeBroker = new LongbridgeBrokerAccountProvider();
-    const massive = new MassiveFinancialDataProvider({
-      getApiKey: () => this.credentials.getCredential(MASSIVE_CREDENTIAL_ID),
-      getEndpoint: async () => (await this.connectionStore.getConfig('massive'))?.endpoint,
-    });
-    this.providerRouter.register(longbridgeData);
-    this.providerRouter.register(longbridgeBroker);
-    this.providerRouter.register(massive);
-    this.providerRouter.setRouting(DEFAULT_PROVIDER_ROUTING);
-
-    // Keep renderer IPC and agent tools on the same provider gateway.  The
-    // service retains its dedicated Longbridge status probe, while market-data
-    // capabilities use the router's configured primary/fallback chain.
-    this.instrumentResolver = new InstrumentResolver(DEFAULT_INSTRUMENT_CATALOG);
-    const routerFetchers = createRouterFetchers(this.providerRouter, {
-      resolve: (query, options) => this.instrumentResolver.resolve(query, options),
-    });
-    void this.hydrateInstrumentCatalog(userData);
-    // FINAGENT_DEMO_DATA=1: offline demo mode. When every real provider is
-    // unavailable, built-in sample data answers instead; every surface built
-    // on it labels its content with source 'demo' (DemoBadge).
-    const demoData = process.env.FINAGENT_DEMO_DATA === '1';
-    const capabilityFetchers = demoData ? withDemoDataFallback(routerFetchers) : routerFetchers;
-    this.marketData = new MarketDataService({ fetchers: capabilityFetchers });
-    this.registry = createFullRegistry(capabilityFetchers);
-    this.executor = new CapabilityExecutor();
-
-    this.researchService = new ResearchService({
-      registry: this.registry,
-      synthesizer:
-        provider === 'local'
-          ? new LocalResearchSynthesizer()
-          : { synthesize: this.runResearchSynthesis },
-      repository: new ResearchReportRepository(new JsonFileStore(join(userData, 'store'))),
-      getIdentity: async () => {
-        const state = provider === 'local' ? undefined : await this.requireLlm().getState();
-        return {
-          provider: state?.model?.provider ?? provider,
-          model: state?.model?.id ?? 'local',
-          config: createHash('sha256').update(JSON.stringify({
-            routing: await this.connectionStore.getRouting(DEFAULT_PROVIDER_ROUTING),
-            api: state?.model?.api, endpoint: state?.model?.baseUrl, thinking: state?.thinkingLevel,
-          })).digest('hex'),
-        };
-      },
-      onReport: async (report) => {
-        await this.outcomeService.createOpinionFromReport(report);
-        await this.saveDiffForReport(report);
-      },
-      onRunComplete: (result) => this.exportResearchTrace(result),
-    });
-
-    // V5 outcome evaluation: opinions snapshotted from reports, outcomes
-    // evaluated when their horizon is reached (spec §29–35).
-    this.outcomeRepository = new OutcomeRepository(new JsonFileStore(userData));
-    this.outcomeService = new OutcomeService({ repository: this.outcomeRepository });
-
-    // V5 screening + import services (spec §5–10, §43–49).
-    this.screeningService = new ScreeningService({
-      registry: this.registry,
-      executor: this.executor,
-      repository: new ScreeningRunRepository(new JsonFileStore(userData)),
-    });
-    this.diffRepository = new ResearchDiffRepository(new JsonFileStore(userData));
-    this.importRepository = new ManualPortfolioRepository(new JsonFileStore(userData));
-
-    // V5 market pulse + performance (spec §50–52, §36–38).
-    this.pulseService = new PulseService({
-      registry: this.registry,
-      screening: this.screeningService,
-      executor: this.executor,
-    });
-    this.performanceService = new PerformanceService(this.outcomeRepository);
-
-    // V5 scheduled research (spec §21–25): five default rules, seeded once.
-    this.automationRules = new AutomationRuleRepository(new JsonFileStore(userData));
-    this.automationRuns = new AutomationRunRepository(new JsonFileStore(userData));
-    void this.seedAutomationRules();
-
-    this.thesisRepository = new ThesisRepository({ storageDir: join(userData, 'thesis') });
-    this.thesisService = new ThesisService({
-      registry: this.registry,
-      repository: this.thesisRepository,
-      impactRepository: new ThesisImpactRepository({ storageDir: join(userData, 'thesis') }),
-      evaluator:
-        provider === 'local'
-          ? createLocalThesisEvaluator()
-          : createAgentEvaluator(this.runThesisImpact),
-    });
-
-    const alertsStore = new JsonFileStore(userData);
-    this.alertRepository = new AlertRuleRepository(alertsStore);
-    this.alertEventLog = new AlertEventLog(alertsStore);
-    this.alertEngine = new AlertEngine({
-      registry: this.registry,
-      repository: this.alertRepository,
-      eventLog: this.alertEventLog,
-      onTrigger: (event) => void this.handleAlertTrigger(event),
-    });
-
-    this.portfolioRisk = new PortfolioRiskService({
-      registry: this.registry,
-      executor: this.executor,
-      synthesizer: provider === 'local' ? defaultPortfolioRiskSynthesizer : this.runRiskSummary,
-    });
-
-    this.kernel = new AgentKernel({
-      storageDir: join(userData, 'store'),
-      piSessionDir: join(userData, 'pi-sessions'),
-      provider,
-      marketData: this.marketData,
-      demoData,
-      registry: new FinanceToolRegistry(this.registry),
-      skillHub: this.skillHub,
-      rpc: {
-        cwd: getPiCwd(),
-        requiredEnvKeys: readRequiredLlmEnvKeys(),
-        env: () => this.buildRuntimeEnv(),
-      },
-    });
-
-    // V7 evaluation & observability: settings load synchronously so the Pi
-    // extension list is correct before the first runtime spawn; tracing is
-    // off by default (spec §11, §58).
-    this.evaluationStore = new EvaluationStore(new JsonFileStore(userData));
-    this.evaluationSettings = this.evaluationStore.getSettingsSync();
-    this.evaluationBackend = resolveBackend(this.evaluationSettings, undefined);
-    this.evaluationRedactor = new EvaluationRedactor(this.evaluationSettings.privacyLevel);
-    this.traceCorrelation = new TraceCorrelationService({
-      backend: this.evaluationBackend,
-      store: this.evaluationStore,
-    });
-    this.applyRuntimeExtensions();
-
     this.businessResearchRepository = new BusinessResearchRepository(new JsonFileStore(userData));
-    const businessResearchSessionDir = join(userData, 'business-research-pi-sessions');
-    this.businessResearchAdapter = provider === 'local'
-      ? undefined
-      : createPiBusinessResearchAdapter({
-          rpc: this.businessResearchPiRpc = new PiRpcClient({
-            command: process.env.FINAGENT_PI_COMMAND ?? 'bunx',
-            args: createBusinessResearchPiArgs(businessResearchSessionDir),
-            cwd: getPiCwd(),
-            sessionDir: businessResearchSessionDir,
-            requiredEnvKeys: readRequiredLlmEnvKeys(),
-            env: async () => ({
-              ...await this.buildRuntimeEnv(),
-              FINAGENT_BUSINESS_RESEARCH_ONLY: '1',
-              FINAGENT_BRAVE_SEARCH_API_KEY:
-                await this.credentials.getCredential(BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID) ?? '',
-            }),
-          }),
-          sessionDirectory: businessResearchSessionDir,
-          prepareRequest: async () => {
-            const activeLlm = this.kernel.getLlmApi();
-            if (!activeLlm) return;
-            const state = await activeLlm.getState();
-            if (state.model?.provider && state.model.id) {
-              await this.businessResearchPiRpc?.setModel(state.model.provider, state.model.id);
-            }
-            if (state.thinkingLevel) await this.businessResearchPiRpc?.setThinkingLevel(state.thinkingLevel);
-          },
-        });
+    const sessionDirectory = join(userData, 'business-research-pi-sessions');
+    if (this.provider === 'pi-runtime') {
+      const usesBundledPiRuntime = process.env.FINAGENT_PI_COMMAND === undefined;
+      this.businessResearchPiRpc = new PiRpcClient({
+        command: process.env.FINAGENT_PI_COMMAND ?? process.execPath,
+        args: createBusinessResearchPiArgs(sessionDirectory, usesBundledPiRuntime),
+        cwd: getPiCwd(),
+        sessionDir: sessionDirectory,
+        requiredEnvKeys: process.env.FINAGENT_LLM_ENV_KEYS?.split(',').map((key) => key.trim()).filter(Boolean) ?? [],
+        env: () => this.buildRuntimeEnv(),
+      });
+      this.businessResearchAdapter = createPiBusinessResearchAdapter({
+        rpc: this.businessResearchPiRpc,
+        sessionDirectory,
+        prepareRequest: async () => {
+          const state = await this.businessResearchPiRpc?.getState();
+          if (state?.model?.provider && state.model.id) {
+            await this.businessResearchPiRpc?.setModel(state.model.provider, state.model.id);
+          }
+          if (state?.thinkingLevel) {
+            await this.businessResearchPiRpc?.setThinkingLevel(state.thinkingLevel);
+          }
+        },
+      });
+    }
+
     this.businessResearchService = new BusinessResearchService(this.businessResearchRepository, {
       createDecisionModel: (runId, task, mode) => mode === 'fixture'
         ? createBusinessResearchFixtureDecisionModel(task)
@@ -538,11 +112,9 @@ export class AgentKernelHost {
               throw createCodeError('BUSINESS_RESEARCH_PI_UNAVAILABLE', 'Configure an available Pi model runtime to run research.');
             },
           },
-      createTools: (runId, task, mode) => mode === 'fixture'
-        ? createBusinessResearchFixtureTools(runId, task)
-        : createCredentialBackedBraveTools(
-            () => this.credentials.getCredential(BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID),
-          ),
+      createTools: (_runId, task, mode) => mode === 'fixture'
+        ? createBusinessResearchFixtureTools(_runId, task)
+        : this.createCredentialBackedBraveTools(),
       generateReport: async (input) => {
         if (input.mode === 'fixture') return createBusinessResearchFixtureReportDraft(input);
         if (!this.businessResearchAdapter) {
@@ -551,14 +123,13 @@ export class AgentKernelHost {
         return this.businessResearchAdapter.generateReport(input);
       },
     });
+
     this.businessResearchScheduler = new BusinessResearchScheduler(
       this.businessResearchRepository,
       this.businessResearchService,
       {
         probe: (input) => retryTransientMonitorProbe(input.signal, async () => {
-          const tools = createCredentialBackedBraveTools(
-            () => this.credentials.getCredential(BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID),
-          );
+          const tools = this.createCredentialBackedBraveTools();
           const found = await tools.searchWeb(input.query, input.signal);
           const snapshots: BusinessResearchMonitorSourceSnapshot[] = [];
           for (const result of found.slice(0, 5)) {
@@ -566,7 +137,7 @@ export class AgentKernelHost {
             try {
               snapshot = await tools.openSource(result.id, input.signal);
             } catch {
-              // A search excerpt can still be compared; it remains labeled as unverified evidence.
+              // The search excerpt remains usable evidence, but is kept unverified.
             }
             snapshots.push({
               url: snapshot.url,
@@ -581,276 +152,12 @@ export class AgentKernelHost {
       },
     );
     this.businessResearchScheduler.start();
-
-    this.unsubscribeEval = this.kernel.runs.subscribe((event) => void this.observeRunEvent(event));
-    void this.refreshEvaluationBackend();
-    void this.skillHub.loadSkills();
-    this.alertEngine.start();
-    void this.outcomeService.evaluateDue(undefined, this.fetchOutcomeHistory);
-    this.startAutomationScheduler();
   }
 
-  /** Forward kernel events to the window's renderer. */
-  attach(window: BrowserWindow): void {
-    this.window = window;
-    this.unsubscribe?.();
-    this.unsubscribe = this.kernel.runs.subscribe((event: AgentEvent) => {
-      if (!window.isDestroyed()) {
-        window.webContents.send('agent:event', event);
-      }
-    });
-    // Stream Event Protocol v1 (issue #27): parallel transport for the
-    // protocol channel, alongside the legacy agent:event delivery.
-    this.streamUnsubscribe?.();
-    this.streamUnsubscribe = this.kernel.runs.subscribeStream((sessionId, event) => {
-      if (!window.isDestroyed()) {
-        window.webContents.send('agent:stream', { sessionId, event });
-      }
-    });
-    this.connectionsUnsubscribe?.();
-    this.connectionsUnsubscribe = this.connectionStore.subscribe(() => {
-      void this.pushConnections();
-    });
-  }
-
-  async hydrate(): Promise<{ sessions: SessionMeta[] }> {
-    return { sessions: await this.kernel.sessions.listSessions() };
-  }
-
-  async createSession(title: unknown): Promise<SessionMeta> {
-    return this.kernel.sessions.createSession(typeof title === 'string' ? title : undefined);
-  }
-
-  async deleteSession(sessionId: unknown): Promise<void> {
-    await this.kernel.deleteSession(requireString(sessionId, 'sessionId'));
-  }
-
-  async getMessages(sessionId: unknown): Promise<Message[]> {
-    return this.kernel.sessions.listMessages(requireString(sessionId, 'sessionId'));
-  }
-
-  async listRuns(sessionId: unknown): Promise<Run[]> {
-    return this.kernel.sessions.listRuns(requireString(sessionId, 'sessionId'));
-  }
-
-  async startRun(input: unknown): Promise<Run> {
-    const request = requireObject(input) as Partial<StartRunRequest>;
-    let workspaceContext: WorkspaceContext | undefined;
-    if (request.workspaceContext && typeof request.workspaceContext === 'object') {
-      const context = request.workspaceContext as Record<string, unknown>;
-      workspaceContext = {};
-      if (typeof context.activeSymbol === 'string') {
-        workspaceContext.activeSymbol = context.activeSymbol.toUpperCase();
-      }
-      if (
-        context.activeView === 'overview' ||
-        context.activeView === 'chart' ||
-        context.activeView === 'financials' ||
-        context.activeView === 'news' ||
-        context.activeView === 'portfolio'
-      ) {
-        workspaceContext.activeView = context.activeView;
-      }
-      if (typeof context.selectedPosition === 'string') {
-        workspaceContext.selectedPosition = context.selectedPosition;
-      }
-      if (
-        Array.isArray(context.comparisonSymbols) &&
-        context.comparisonSymbols.every((entry) => typeof entry === 'string')
-      ) {
-        workspaceContext.comparisonSymbols = context.comparisonSymbols.map((entry) =>
-          entry.toUpperCase()
-        );
-      }
-    }
-    // V8: new agent responses follow the *effective* app locale unless the
-    // user explicitly requests another language in the prompt (spec §41–42).
-    // Resolved after validation and with a safe fallback so a prefs failure
-    // can never block an agent run (failure-isolation, spec §87).
-    return this.kernel.runs.startRun(
-      requireString(request.sessionId, 'sessionId'),
-      requireString(request.content, 'content'),
-      workspaceContext,
-      await this.effectiveRunLocale()
-    );
-  }
-
-  private async effectiveRunLocale(): Promise<SupportedLocale> {
-    try {
-      return (await this.getAppPreferences()).effectiveLocale;
-    } catch {
-      return 'en-US';
-    }
-  }
-
-  async cancelRun(input: unknown): Promise<void> {
-    const request = requireObject(input);
-    await this.kernel.runs.cancelRun(
-      requireString(request.sessionId, 'sessionId'),
-      requireString(request.runId, 'runId')
-    );
-  }
-
-  /** Stream Event replay（ADR 0001 §Reconnect）：按 lastSequence 补发或明确不可恢复。 */
-  streamReplay(input: unknown): StreamReplayResult {
-    const request = requireObject(input);
-    const lastSequence = request.lastSequence;
-    // 游标必须是非负整数：0 表示从头补发，负数/小数/NaN 都是非法客户端状态。
-    if (typeof lastSequence !== 'number' || !Number.isInteger(lastSequence) || lastSequence < 0) {
-      throw createCodeError('INVALID_ARGUMENT', 'lastSequence must be a non-negative integer.');
-    }
-    return this.kernel.runs.replayStream(
-      requireString(request.runId, 'runId'),
-      lastSequence
-    );
-  }
-
-  getTools(): Promise<ApiResult<ToolDefinition[]>> {
-    return this.kernel.getTools();
-  }
-
-  getQuote(symbol: unknown) {
-    return this.marketData.getQuote(requireString(symbol, 'symbol').toUpperCase());
-  }
-
-  getKline(input: unknown) {
-    const request = requireObject(input);
-    const payload: KlineRequest = {
-      symbol: requireString(request.symbol, 'symbol').toUpperCase(),
-    };
-
-    if (typeof request.period === 'string') {
-      payload.period = request.period as KlineRequest['period'];
-    }
-
-    if (typeof request.limit === 'number' && Number.isFinite(request.limit)) {
-      payload.limit = request.limit;
-    }
-
-    return this.marketData.getKline({
-      symbol: payload.symbol,
-      period: payload.period,
-      limit: payload.limit,
-    });
-  }
-
-  getPortfolio() {
-    return this.marketData.getPortfolio();
-  }
-
-  getStaticInfo(symbol: unknown) {
-    return this.marketData.getStaticInfo(requireString(symbol, 'symbol').toUpperCase());
-  }
-
-  getCalcIndex(symbol: unknown) {
-    return this.marketData.getCalcIndex(requireString(symbol, 'symbol').toUpperCase());
-  }
-
-  getMarketStatus() {
-    return this.marketData.getMarketStatus();
-  }
-
-  getNews(symbol: unknown) {
-    return this.marketData.getNews(requireString(symbol, 'symbol').toUpperCase());
-  }
-
-  async getLongBridgeStatus() {
-    const status = await this.marketData.getLongBridgeStatus();
-    const message = status.available
-      ? 'LongBridge CLI is installed and authenticated.'
-      : status.error?.message ?? 'LongBridge CLI is not ready.';
-    const action = status.available
-      ? undefined
-      : getLongBridgeStatusAction(status.status);
-
-    return {
-      ...status,
-      authenticated: status.authed,
-      message,
-      action,
-      code: status.error?.code,
-    };
-  }
-
-  // -------------------------------------------------------------------------
-  // Folio V3: capabilities, research, thesis, compare, alerts, portfolio risk
-  // -------------------------------------------------------------------------
-
-  /** Capability metadata for UI availability (schemas never cross IPC). */
-  listCapabilities() {
-    return this.registry.list().map((cap) => ({
-      id: cap.id,
-      name: cap.name,
-      description: cap.description,
-      category: cap.category,
-      riskLevel: cap.riskLevel,
-      auth: cap.auth,
-      toolName: cap.toolName,
-    }));
-  }
-
-  /** Skill readiness: capability requirements × registry coverage. */
-  listSkillReadiness(): SkillReadiness[] {
-    const readiness: SkillReadiness[] = [];
-    for (const skillId of Object.keys(skillCapabilityMap)) {
-      const requirements = skillCapabilityMap[skillId];
-      if (!requirements) continue;
-      readiness.push(computeSkillReadiness(skillId, requirements, this.registry));
-    }
-    return readiness;
-  }
-
-  // -- Deep Research ---------------------------------------------------------
-
-  async researchStart(input: unknown): Promise<ResearchRunSummary> {
-    const request = requireObject(input);
-    const symbol = requireString(request.symbol, 'symbol').toUpperCase();
-    const strategyId =
-      typeof request.strategyId === 'string' &&
-      (STRATEGY_IDS as readonly string[]).includes(request.strategyId)
-        ? (request.strategyId as StrategyId)
-        : undefined;
-    return this.researchService.start(symbol, strategyId, await this.effectiveRunLocale());
-  }
-
-  async researchCancel(input: unknown): Promise<void> {
-    const request = requireObject(input);
-    await this.researchService.cancel(requireString(request.runId, 'runId'));
-  }
-
-  async researchResume(input: unknown): Promise<ResearchRunSummary> {
-    return this.researchService.resume(requireString(requireObject(input).runId, 'runId'));
-  }
-
-  async researchRestart(input: unknown): Promise<ResearchRunSummary> {
-    return this.researchService.restart(requireString(requireObject(input).runId, 'runId'));
-  }
-
-  async researchDiscard(input: unknown): Promise<void> {
-    return this.researchService.discard(requireString(requireObject(input).runId, 'runId'));
-  }
-
-  async researchListRuns(): Promise<ResearchRunSummary[]> {
-    return this.researchService.listRuns();
-  }
-
-  async researchGetRun(input: unknown): Promise<ResearchRunSummary | undefined> {
-    const request = requireObject(input);
-    return this.researchService.getRun(requireString(request.runId, 'runId'));
-  }
-
-  async researchListReports(input: unknown): Promise<ResearchReport[]> {
-    const request = requireObject(input);
-    const symbol =
-      typeof request.symbol === 'string' && request.symbol.length > 0
-        ? request.symbol.toUpperCase()
-        : undefined;
-    return this.researchService.listReports(symbol);
-  }
-
-  async researchGetReport(input: unknown): Promise<ResearchReport | undefined> {
-    const request = requireObject(input);
-    return this.researchService.getReport(requireString(request.reportId, 'reportId'));
+  async dispose(): Promise<void> {
+    await this.businessResearchScheduler.dispose();
+    await this.businessResearchService.dispose();
+    await this.businessResearchPiRpc?.dispose();
   }
 
   async businessResearchCredentialStatus(): Promise<{ configured: boolean; updatedAt?: number }> {
@@ -872,13 +179,25 @@ export class AgentKernelHost {
     return this.businessResearchCredentialStatus();
   }
 
+  businessResearchCreateProject(input: unknown) {
+    return this.businessResearchService.createProject(input);
+  }
+
+  businessResearchListProjects() {
+    return this.businessResearchService.listProjects();
+  }
+
   async businessResearchStart(input: unknown) {
     const request = requireObject(input);
     const mode = request.mode === undefined ? 'live' : request.mode;
     if (!isBusinessResearchRunMode(mode)) {
       throw createCodeError('INVALID_ARGUMENT', 'mode must be live or fixture.');
     }
-    return this.businessResearchService.start(request.task ?? request, { mode });
+    return this.businessResearchService.start(request.task ?? request, {
+      mode,
+      ...(request.projectId === undefined ? {} : { projectId: requireBusinessResearchId('project', request.projectId) as BusinessResearchProjectId }),
+      ...(request.parentRunId === undefined ? {} : { parentRunId: requireBusinessResearchId('run', request.parentRunId) as BusinessResearchRunId }),
+    });
   }
 
   async businessResearchCancel(input: unknown): Promise<boolean> {
@@ -886,7 +205,7 @@ export class AgentKernelHost {
     return this.businessResearchService.cancel(requireBusinessResearchId('run', request.runId) as BusinessResearchRunId);
   }
 
-  async businessResearchListRuns() {
+  businessResearchListRuns() {
     return this.businessResearchService.listRuns();
   }
 
@@ -900,7 +219,7 @@ export class AgentKernelHost {
     return this.businessResearchService.listEvents(requireBusinessResearchId('run', request.runId) as BusinessResearchRunId);
   }
 
-  async businessResearchListReports() {
+  businessResearchListReports() {
     return this.businessResearchService.listReports();
   }
 
@@ -909,7 +228,7 @@ export class AgentKernelHost {
     return this.businessResearchService.getReport(requireBusinessResearchId('report', request.reportId) as BusinessResearchReportId);
   }
 
-  async businessResearchEvaluate() {
+  businessResearchEvaluate() {
     return evaluateBusinessResearchEvaluationCorpus();
   }
 
@@ -920,42 +239,35 @@ export class AgentKernelHost {
     }
     return this.businessResearchService.subscribe(request.task ?? request, {
       intervalMs: request.intervalMs as number | undefined,
+      ...(request.projectId === undefined ? {} : { projectId: requireBusinessResearchId('project', request.projectId) as BusinessResearchProjectId }),
     });
   }
 
   async businessResearchUnsubscribe(input: unknown) {
     const request = requireObject(input);
-    return this.businessResearchService.unsubscribe(
-      requireBusinessResearchId('subscription', request.subscriptionId) as BusinessResearchSubscriptionId,
-    );
+    return this.businessResearchService.unsubscribe(requireBusinessResearchId('subscription', request.subscriptionId) as BusinessResearchSubscriptionId);
   }
 
   async businessResearchResumeSubscription(input: unknown) {
     const request = requireObject(input);
-    return this.businessResearchService.resumeSubscription(
-      requireBusinessResearchId('subscription', request.subscriptionId) as BusinessResearchSubscriptionId,
-    );
+    return this.businessResearchService.resumeSubscription(requireBusinessResearchId('subscription', request.subscriptionId) as BusinessResearchSubscriptionId);
   }
 
   async businessResearchRemoveSubscription(input: unknown) {
     const request = requireObject(input);
-    return this.businessResearchService.removeSubscription(
-      requireBusinessResearchId('subscription', request.subscriptionId) as BusinessResearchSubscriptionId,
-    );
+    return this.businessResearchService.removeSubscription(requireBusinessResearchId('subscription', request.subscriptionId) as BusinessResearchSubscriptionId);
   }
 
-  async businessResearchListSubscriptions() {
+  businessResearchListSubscriptions() {
     return this.businessResearchService.listSubscriptions();
   }
 
   async businessResearchListChecks(input: unknown) {
     const request = requireObject(input);
-    return this.businessResearchRepository.listChecks(
-      requireBusinessResearchId('subscription', request.subscriptionId) as BusinessResearchSubscriptionId,
-    );
+    return this.businessResearchRepository.listChecks(requireBusinessResearchId('subscription', request.subscriptionId) as BusinessResearchSubscriptionId);
   }
 
-  async businessResearchCheckDue() {
+  businessResearchCheckDue() {
     return this.businessResearchScheduler.checkDue();
   }
 
@@ -969,14 +281,12 @@ export class AgentKernelHost {
     if (!this.businessResearchAdapter) {
       throw createCodeError('BUSINESS_RESEARCH_PI_UNAVAILABLE', 'Configure a live Pi model before running acceptance.');
     }
-    const credential = await this.businessResearchCredentialStatus();
-    if (!credential.configured) {
+    if (!(await this.businessResearchCredentialStatus()).configured) {
       throw createCodeError('BUSINESS_RESEARCH_BRAVE_CREDENTIAL_MISSING', 'Configure Brave Search before running acceptance.');
     }
-
     const state = await this.getLlmState();
-    const modelProvider = typeof state.model?.provider === 'string' ? state.model.provider : undefined;
-    const modelId = typeof state.model?.id === 'string' ? state.model.id : undefined;
+    const modelProvider = state.model?.provider;
+    const modelId = state.model?.id;
     if (!modelProvider || !modelId) {
       throw createCodeError('BUSINESS_RESEARCH_MODEL_UNAVAILABLE', 'Select an available model before running acceptance.');
     }
@@ -991,29 +301,19 @@ export class AgentKernelHost {
     try {
       const result = await runBusinessResearchLiveCounterfactuals({
         task: normalized.value,
-        tools: createCredentialBackedBraveTools(
-          () => this.credentials.getCredential(BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID),
-        ),
+        tools: this.createCredentialBackedBraveTools(),
         createDecisionModel: (runId) => this.businessResearchAdapter!.createDecisionModel(runId),
         createRunId: () => {
-          const parsed = parseBusinessResearchId('run', `run-live-e2e-${randomUUID()}`);
-          if (parsed === undefined) {
-            throw createCodeError('BUSINESS_RESEARCH_INVALID_ID', 'Could not create a live probe identifier.');
-          }
-          return parsed as BusinessResearchRunId;
+          const id = parseBusinessResearchId('run', `run-live-e2e-${randomUUID()}`);
+          if (id === undefined) throw createCodeError('BUSINESS_RESEARCH_INVALID_ID', 'Could not create a live probe identifier.');
+          return id as BusinessResearchRunId;
         },
         sanitizeText: redactSecrets,
         signal: controller.signal,
       });
-      return {
-        model: { provider: modelProvider, id: modelId },
-        elapsedMs: Date.now() - startedAt,
-        ...result,
-      };
+      return { model: { provider: modelProvider, id: modelId }, elapsedMs: Date.now() - startedAt, ...result };
     } catch (error) {
-      if (timedOut) {
-        throw createCodeError('BUSINESS_RESEARCH_LIVE_E2E_TIMEOUT', 'Live counterfactual acceptance exceeded 150 seconds.');
-      }
+      if (timedOut) throw createCodeError('BUSINESS_RESEARCH_LIVE_E2E_TIMEOUT', 'Live counterfactual acceptance exceeded 150 seconds.');
       throw error;
     } finally {
       clearTimeout(timer);
@@ -1023,12 +323,8 @@ export class AgentKernelHost {
   async businessResearchCheckSubscriptionNow(input: unknown) {
     this.assertBusinessResearchLiveE2eEnabled();
     const request = requireObject(input);
-    const subscriptionId = parseBusinessResearchId('subscription', request.subscriptionId) as
-      | BusinessResearchSubscriptionId
-      | undefined;
-    if (subscriptionId === undefined) {
-      throw createCodeError('INVALID_ARGUMENT', 'subscriptionId must be a valid subscription id.');
-    }
+    const subscriptionId = parseBusinessResearchId('subscription', request.subscriptionId) as BusinessResearchSubscriptionId | undefined;
+    if (subscriptionId === undefined) throw createCodeError('INVALID_ARGUMENT', 'subscriptionId must be a valid subscription id.');
     const subscription = await this.businessResearchRepository.getSubscription(subscriptionId);
     if (subscription === undefined || !subscription.enabled) {
       throw createCodeError('BUSINESS_RESEARCH_SUBSCRIPTION_UNAVAILABLE', 'The live acceptance subscription is unavailable.');
@@ -1036,17 +332,12 @@ export class AgentKernelHost {
     if (!(await this.businessResearchCredentialStatus()).configured) {
       throw createCodeError('BUSINESS_RESEARCH_BRAVE_CREDENTIAL_MISSING', 'Configure Brave Search before running acceptance.');
     }
-
     const now = Date.now();
     await this.businessResearchRepository.saveSubscription({ ...subscription, updatedAt: now, nextCheckAt: now });
     const checks = await this.businessResearchScheduler.checkDue();
     const check = checks.find((item) => item.subscriptionId === subscriptionId);
-    if (check === undefined) {
-      throw createCodeError('BUSINESS_RESEARCH_LIVE_E2E_CHECK_MISSING', 'The real subscription check did not complete.');
-    }
-    const run = check.runId === undefined
-      ? undefined
-      : await this.businessResearchService.waitForRun(check.runId);
+    if (check === undefined) throw createCodeError('BUSINESS_RESEARCH_LIVE_E2E_CHECK_MISSING', 'The real subscription check did not complete.');
+    const run = check.runId === undefined ? undefined : await this.businessResearchService.waitForRun(check.runId);
     if (run !== undefined && run.mode !== 'live') {
       throw createCodeError('BUSINESS_RESEARCH_LIVE_E2E_FIXTURE_RUN', 'The live monitor created a non-live research run.');
     }
@@ -1059,15 +350,7 @@ export class AgentKernelHost {
         startedAt: check.startedAt,
         completedAt: check.completedAt,
       },
-      followUpRun: run === undefined
-        ? null
-        : {
-          id: run.id,
-          mode: run.mode,
-          status: run.state.status,
-          reportId: run.reportId ?? null,
-          failureCode: run.state.status === 'failed' ? run.state.code : null,
-        },
+      followUpRun: summarizeLiveMonitorFollowUpRun(run),
     };
   }
 
@@ -1079,338 +362,96 @@ export class AgentKernelHost {
     })) {
       throw createCodeError('BUSINESS_RESEARCH_LIVE_E2E_DISABLED', 'Live acceptance operations are disabled.');
     }
-
     try {
       const profilePath = app.getPath('userData');
       if (!isAbsolute(profilePath)) throw new Error('Profile path is not absolute.');
       const profile = realpathSync(profilePath);
       const repository = realpathSync(process.cwd());
-      if (isSameOrChildPath(profile, repository)) throw new Error('Profile is inside the repository.');
-      const markerPath = join(profile, '.market-intelligence-live-e2e.json');
-      if (!existsSync(markerPath)) throw new Error('Profile marker is missing.');
-      const marker: unknown = JSON.parse(readFileSync(markerPath, 'utf8'));
-      if (!isRecord(marker) || marker.purpose !== 'market-intelligence-agent-live-e2e' || marker.schemaVersion !== 1) {
-        throw new Error('Profile marker is invalid.');
+      if (!profile.startsWith(`${repository}/`) && !profile.startsWith(`${repository}\\`)) {
+        throw new Error('Live acceptance requires an isolated in-repository userData profile.');
       }
     } catch {
-      throw createCodeError(
-        'BUSINESS_RESEARCH_LIVE_E2E_DISABLED',
-        'Live acceptance requires a marked dedicated profile outside the repository.',
-      );
+      throw createCodeError('BUSINESS_RESEARCH_LIVE_E2E_PROFILE_INVALID', 'Live acceptance requires an isolated in-repository userData profile.');
     }
-  }
-
-  // -- Investment Thesis -----------------------------------------------------
-
-  async thesisList(symbol?: unknown): Promise<InvestmentThesis[]> {
-    if (typeof symbol === 'string' && symbol.length > 0) {
-      return this.thesisRepository.getBySymbol(symbol.toUpperCase());
-    }
-    return this.thesisRepository.list();
-  }
-
-  /** Latest research report for a symbol (used by "Save as Thesis"). */
-  async thesisGetReport(symbol: unknown): Promise<ResearchReport | null> {
-    const reports = await this.researchService.listReports(
-      requireString(symbol, 'symbol').toUpperCase()
-    );
-    return reports[0] ?? null;
-  }
-
-  async thesisSaveFromReport(symbol: unknown): Promise<InvestmentThesis> {
-    const report = await this.thesisGetReport(symbol);
-    if (!report) {
-      throw createCodeError(
-        'REPORT_NOT_FOUND',
-        'No research report for this symbol. Run Deep Research first.'
-      );
-    }
-    return this.thesisService.saveFromReport(report);
-  }
-
-  async thesisReEvaluate(symbol: unknown): Promise<ThesisImpact> {
-    return this.thesisService.reEvaluate(requireString(symbol, 'symbol').toUpperCase());
-  }
-
-  async thesisUpdate(input: unknown): Promise<InvestmentThesis> {
-    const request = requireObject(input);
-    return this.thesisService.updateThesis(request as unknown as InvestmentThesis);
-  }
-
-  async thesisListImpacts(symbol: unknown): Promise<ThesisImpact[]> {
-    return this.thesisService.listImpacts(requireString(symbol, 'symbol').toUpperCase());
-  }
-
-  // -- Compare ---------------------------------------------------------------
-
-  async compareBuild(input: unknown): Promise<Comparison> {
-    const request = requireObject(input);
-    if (!Array.isArray(request.symbols) || request.symbols.length < 2) {
-      throw createCodeError('INVALID_ARGUMENT', 'Compare needs at least two symbols.');
-    }
-    const symbols = request.symbols.map((entry) =>
-      requireString(entry, 'symbols[]').toUpperCase()
-    );
-    return buildComparison(symbols, this.registry, { executor: this.executor });
-  }
-
-  // -- Portfolio risk --------------------------------------------------------
-
-  async portfolioRiskAnalyze(): Promise<PortfolioRiskReport> {
-    return this.portfolioRisk.analyze();
-  }
-
-  // -- Alerts (v2 engine) ----------------------------------------------------
-
-  async loadAlertRules(): Promise<AlertRule[]> {
-    return this.alertRepository.list();
-  }
-
-  async saveAlertRules(input: unknown): Promise<void> {
-    if (!Array.isArray(input)) {
-      throw createCodeError('INVALID_ARGUMENT', 'Expected an array of alert rules.');
-    }
-    const incoming = input as AlertRule[];
-    const existing = await this.alertRepository.list();
-    const incomingIds = new Set(incoming.map((rule) => rule.id));
-    for (const rule of incoming) {
-      await this.alertRepository.save(rule);
-    }
-    for (const stale of existing) {
-      if (!incomingIds.has(stale.id)) {
-        await this.alertRepository.remove(stale.id);
-      }
-    }
-  }
-
-  async listAlertEvents(): Promise<AlertTriggerEvent[]> {
-    return this.alertEventLog.list();
-  }
-
-  // -- Agent-backed V3 runners ----------------------------------------------
-
-  /**
-   * Run one prompt through the agent kernel and resolve the final answer.
-   * Creates a throwaway session; the run settles via the event stream.
-   */
-  private async runAgentPrompt(content: string, signal?: AbortSignal, recovery?: ResearchSynthesisInput['recovery']): Promise<string> {
-    // Keep synthesis runs out of the user's copilot history. The run still
-    // uses the normal kernel/runtime contract, but its session is internal.
-    const session = await this.kernel.sessions.createSession('__folio_internal_research__');
-    let agentRunId: string | undefined;
-    let cleanup = () => {};
-    try {
-      const answer = new Promise<string>((resolve, reject) => {
-        const stop = (code: string, message: string) => {
-          cleanup();
-          if (agentRunId) void this.kernel.runs.cancelRun(session.id, agentRunId).catch(() => undefined);
-          reject(createCodeError(code, message));
-        };
-        const timer = setTimeout(
-          () => stop('SYNTHESIS_TIMEOUT', 'Agent synthesis timed out.'),
-          240_000
-        );
-        const abort = () => stop('SYNTHESIS_CANCELLED', 'Synthesis cancelled.');
-        signal?.addEventListener('abort', abort, { once: true });
-        const unsubscribe = this.kernel.runs.subscribe((event: AgentEvent) => {
-          if (event.sessionId !== session.id) return;
-          if (event.type === 'run_completed') {
-            cleanup();
-            resolve(event.payload.answer);
-          } else if (event.type === 'run_failed') {
-            cleanup();
-            reject(createCodeError(event.payload.error.code, event.payload.error.message));
-          }
-        });
-        cleanup = () => {
-          clearTimeout(timer);
-          signal?.removeEventListener('abort', abort);
-          unsubscribe();
-        };
-      });
-      // A rejection can precede startRun/onAgentRun returning.
-      void answer.catch(() => undefined);
-      if (signal?.aborted) throw createCodeError('SYNTHESIS_CANCELLED', 'Synthesis cancelled.');
-      const run = await this.kernel.runs.startRun(session.id, content);
-      agentRunId = run.id;
-      if (signal?.aborted) {
-        await this.kernel.runs.cancelRun(session.id, run.id);
-        throw createCodeError('SYNTHESIS_CANCELLED', 'Synthesis cancelled.');
-      }
-      await recovery?.onAgentRun(run.id, session.id);
-      return await answer;
-    } catch (error) {
-      if (agentRunId) await this.kernel.runs.cancelRun(session.id, agentRunId).catch(() => undefined);
-      throw error;
-    } finally {
-      cleanup();
-      // Recovery-linked sessions retain their trace and run history.
-      if (!recovery) await this.kernel.deleteSession(session.id).catch(() => undefined);
-    }
-  }
-
-  private runResearchSynthesis = async (
-    input: ResearchSynthesisInput,
-    signal?: AbortSignal
-  ): Promise<ResearchSynthesis> => {
-    const answer = await this.runAgentPrompt(buildSynthesisPrompt(input), signal, input.recovery);
-    return parseSynthesisJson(answer);
-  };
-
-  private runThesisImpact = async (
-    input: ThesisImpactInput,
-    signal?: AbortSignal
-  ): Promise<{ kind: ThesisImpact['kind']; summary: string; updatedThesis: InvestmentThesis }> => {
-    const answer = await this.runAgentPrompt(buildImpactPrompt(input), signal);
-    return parseImpactJson(answer);
-  };
-
-  private runRiskSummary = async (
-    input: PortfolioRiskSynthesisInput,
-    signal?: AbortSignal
-  ): Promise<string> => {
-    const answer = await this.runAgentPrompt(buildRiskSummaryPrompt(input), signal);
-    return answer.trim();
-  };
-
-  /** OS notification + renderer push + thesis-impact hook for alert triggers. */
-  private async handleAlertTrigger(event: AlertTriggerEvent): Promise<void> {
-    this.window?.webContents.send('alerts:triggered', event);
-    if (Notification.isSupported()) {
-      new Notification({
-        title: `Folio — ${event.title}`,
-        body: event.message,
-      }).show();
-    }
-    if (!event.symbol) return;
-    const theses = await this.thesisRepository.getBySymbol(event.symbol);
-    if (theses.length === 0) return;
-    try {
-      const impact = await this.thesisService.reEvaluate(event.symbol, {
-        ruleId: event.ruleId,
-        ruleType: event.ruleType,
-        eventId: event.id,
-      });
-      this.window?.webContents.send('thesis:impact', impact);
-    } catch (error) {
-      // An alert must never crash the engine tick; the trigger is already logged.
-      console.error('thesis impact evaluation failed:', error);
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // LLM control plane
-  // -------------------------------------------------------------------------
-
-  private requireLlm() {
-    const api = this.kernel.getLlmApi();
-    if (!api) {
-      throw createCodeError(
-        'LLM_UNAVAILABLE',
-        'The LLM control plane is only available with the Pi runtime. Set FINAGENT_AGENT_PROVIDER=pi-runtime.'
-      );
-    }
-    return api;
   }
 
   getLlmState(): Promise<LlmRuntimeState> {
-    return this.requireLlm().getState();
+    return this.readLlmState();
   }
 
-  listModels(): Promise<LlmModel[]> {
-    return this.requireLlm().listModels();
+  async listModels(): Promise<LlmModel[]> {
+    return this.requirePiRpc().getAvailableModels();
   }
 
   async setModel(input: unknown): Promise<LlmRuntimeState> {
     const request = requireObject(input);
-    return this.requireLlm().setModel(
-      requireString(request.provider, 'provider'),
-      requireString(request.modelId, 'modelId')
-    );
+    const provider = requireString(request.provider, 'provider');
+    const modelId = requireString(request.modelId, 'modelId');
+    const model = await this.requirePiRpc().setModel(provider, modelId);
+    if (model.provider !== provider || model.id !== modelId) {
+      throw createCodeError('PI_RUNTIME_ERROR', `Pi did not switch to ${provider}/${modelId}.`);
+    }
+    return this.readLlmState();
   }
 
-  listThinkingLevels(): Promise<string[]> {
-    return this.requireLlm().listThinkingLevels();
+  async listThinkingLevels(): Promise<string[]> {
+    const state = await this.requirePiRpc().getState();
+    return thinkingLevels(state.model?.thinkingLevelMap);
   }
 
   async setThinkingLevel(input: unknown): Promise<LlmRuntimeState> {
     const request = requireObject(input);
-    return this.requireLlm().setThinkingLevel(requireString(request.level, 'level'));
+    await this.requirePiRpc().setThinkingLevel(requireString(request.level, 'level'));
+    return this.readLlmState();
   }
 
-  /**
-   * Provider status: merges the runtime model registry with the credential
-   * store. `connected` = models listed AND credential present (or no key
-   * required); `missing_credential` = provider known by the runtime but no
-   * key stored; `unavailable` = not in the registry.
-   */
   async getProviders(): Promise<ProviderStatus[]> {
     let models: LlmModel[] = [];
     let runtimeError: string | undefined;
     try {
-      models = await this.requireLlm().listModels();
+      models = await this.listModels();
     } catch (error) {
       runtimeError = error instanceof Error ? error.message : String(error);
     }
-
     const credentialInfos = await this.credentials.listCredentials();
-    const byProvider = new Map<string, LlmModel[]>();
+    const modelsByProvider = new Map<string, LlmModel[]>();
     for (const model of models) {
-      const list = byProvider.get(model.provider) ?? [];
-      list.push(model);
-      byProvider.set(model.provider, list);
+      const providerModels = modelsByProvider.get(model.provider) ?? [];
+      providerModels.push(model);
+      modelsByProvider.set(model.provider, providerModels);
     }
-
-    const statuses: ProviderStatus[] = [];
-    for (const [provider, providerModels] of byProvider) {
-      const credential = credentialInfos.find((info) => info.provider === provider);
-      statuses.push({
+    const statuses: ProviderStatus[] = [...modelsByProvider].map(([provider, providerModels]) => {
+      const configured = credentialInfos.some((info) => info.provider === provider && info.configured);
+      return {
         provider,
-        displayName: providerModels[0]?.name ? provider : provider,
-        status: credential?.configured ? 'connected' : 'missing_credential',
+        displayName: provider,
+        status: configured ? 'connected' : 'missing_credential',
         modelCount: providerModels.length,
-        message: credential?.configured
-          ? undefined
-          : 'No API key stored. Add one in Settings → Models.',
-      });
-    }
+        ...(configured ? {} : { message: 'No API key stored. Add one in Settings → Models.' }),
+      };
+    });
     for (const info of credentialInfos) {
-      if (info.custom || byProvider.has(info.provider)) continue;
-      statuses.push({
-        provider: info.provider,
-        displayName: info.provider,
-        status: 'missing_credential',
-        message: 'Provider is configured but not present in the runtime registry.',
-      });
+      if (info.custom || modelsByProvider.has(info.provider)) continue;
+      statuses.push({ provider: info.provider, displayName: info.provider, status: 'missing_credential', message: 'Provider is configured but not present in the runtime registry.' });
     }
-    if (runtimeError) {
-      statuses.push({
-        provider: 'runtime',
-        displayName: 'Pi Runtime',
-        status: 'runtime_error',
-        message: runtimeError,
-      });
-    }
+    if (runtimeError) statuses.push({ provider: 'runtime', displayName: 'Pi Runtime', status: 'runtime_error', message: redactSecrets(runtimeError) });
     return statuses;
   }
 
-  async listCredentials(): Promise<CredentialInfo[]> {
+  listCredentials(): Promise<CredentialInfo[]> {
     return this.credentials.listCredentials();
   }
 
   async setCredential(input: unknown): Promise<void> {
     const request = requireObject(input);
-    const provider = requireString(request.provider, 'provider');
-    const apiKey = requireString(request.apiKey, 'apiKey');
-    await this.credentials.setCredential(provider, apiKey);
-    // The extension registers providers at Pi startup — respawn to pick up.
-    await this.requireLlm().restart();
+    await this.credentials.setCredential(requireString(request.provider, 'provider'), requireString(request.apiKey, 'apiKey'));
+    await this.requirePiRpc().restart();
   }
 
   async removeCredential(input: unknown): Promise<void> {
     const request = requireObject(input);
     await this.credentials.removeCredential(requireString(request.provider, 'provider'));
-    await this.requireLlm().restart();
+    await this.requirePiRpc().restart();
   }
 
   async setCustomProvider(input: unknown): Promise<void> {
@@ -1423,1384 +464,75 @@ export class AgentKernelHost {
       apiKey: typeof request.apiKey === 'string' ? request.apiKey : undefined,
       models: Array.isArray(request.models) ? request.models : [],
     };
-    if (config.models.length === 0) {
-      throw createCodeError('INVALID_ARGUMENT', 'A custom provider needs at least one model.');
-    }
+    if (config.models.length === 0) throw createCodeError('INVALID_ARGUMENT', 'A custom provider needs at least one model.');
     await this.credentials.setCustomProvider(config);
-    await this.requireLlm().restart();
+    await this.requirePiRpc().restart();
   }
 
   async removeCustomProvider(input: unknown): Promise<void> {
     const request = requireObject(input);
     await this.credentials.removeCustomProvider(requireString(request.name, 'name'));
-    await this.requireLlm().restart();
+    await this.requirePiRpc().restart();
   }
 
   async testProvider(input: unknown): Promise<LlmTestResult> {
     const request = requireObject(input);
-    return this.requireLlm().testProvider(
-      requireString(request.provider, 'provider'),
-      requireString(request.modelId, 'modelId')
-    );
-  }
-  // -------------------------------------------------------------------------
-  // Evaluation & observability (V7 spec §15, §52-63)
-  // -------------------------------------------------------------------------
-
-  /** Renderer-safe settings + live connection state (never the API key). */
-  async getEvaluationSettings(): Promise<{
-    settings: EvaluationSettings;
-    connection: LangSmithConnectionStatus;
-    langfuse: LangfuseConnectionStatus;
-  }> {
-    return {
-      settings: this.evaluationSettings,
-      connection: await this.testEvaluationConnection(),
-      langfuse: await this.testLangfuseConnection(),
-    };
-  }
-
-  async setEvaluationSettings(input: unknown): Promise<EvaluationSettings> {
-    const request = requireObject(input);
-    const sanitized = sanitizeSettings({ ...this.evaluationSettings, ...request });
-    const changed =
-      sanitized.tracingEnabled !== this.evaluationSettings.tracingEnabled ||
-      sanitized.langsmithProject !== this.evaluationSettings.langsmithProject ||
-      sanitized.langsmithEndpoint !== this.evaluationSettings.langsmithEndpoint ||
-      sanitized.langfuseTracingEnabled !== this.evaluationSettings.langfuseTracingEnabled ||
-      sanitized.langfuseHost !== this.evaluationSettings.langfuseHost ||
-      sanitized.privacyLevel !== this.evaluationSettings.privacyLevel;
-    this.evaluationSettings = sanitized;
-    await this.evaluationStore.saveSettings(sanitized);
-    if (changed) {
-      this.evaluationRedactor = new EvaluationRedactor(sanitized.privacyLevel);
-      this.applyRuntimeExtensions();
-      await this.refreshEvaluationBackend();
-      // Env changes (tracing vars, privacy level) apply at the next Pi spawn.
-      if (this.kernel.getLlmApi()) {
-        await this.kernel.getLlmApi()!.restart();
-      }
-    }
-    return sanitized;
-  }
-
-  /** Store the LangSmith API key via safeStorage; renderer never reads it back. */
-  async setEvaluationCredential(input: unknown): Promise<void> {
-    const request = requireObject(input);
-    const apiKey = requireString(request.apiKey, 'apiKey');
-    await this.credentials.setCredential('langsmith', apiKey);
-    this.evaluationSettings = { ...this.evaluationSettings, apiKeyConfigured: true, updatedAt: Date.now() };
-    await this.evaluationStore.saveSettings(this.evaluationSettings);
-    await this.refreshEvaluationBackend();
-  }
-
-  async removeEvaluationCredential(): Promise<void> {
-    await this.credentials.removeCredential('langsmith');
-    this.evaluationSettings = { ...this.evaluationSettings, apiKeyConfigured: false, updatedAt: Date.now() };
-    await this.evaluationStore.saveSettings(this.evaluationSettings);
-    await this.refreshEvaluationBackend();
-  }
-
-  async setLangfuseCredential(input: unknown): Promise<void> {
-    const request = requireObject(input);
-    const publicKey = requireString(request.publicKey, 'publicKey');
-    const secretKey = requireString(request.secretKey, 'secretKey');
-    await this.credentials.setCredential('langfuse', serializeLangfuseCredential(publicKey, secretKey));
-    this.evaluationSettings = { ...this.evaluationSettings, langfuseConfigured: true, updatedAt: Date.now() };
-    await this.evaluationStore.saveSettings(this.evaluationSettings);
-    await this.refreshEvaluationBackend();
-  }
-
-  async removeLangfuseCredential(): Promise<void> {
-    await this.credentials.removeCredential('langfuse');
-    this.evaluationSettings = { ...this.evaluationSettings, langfuseConfigured: false, updatedAt: Date.now() };
-    await this.evaluationStore.saveSettings(this.evaluationSettings);
-    await this.refreshEvaluationBackend();
-  }
-
-  async testLangfuseConnection(): Promise<LangfuseConnectionStatus> {
-    const raw = await this.credentials.getCredential('langfuse');
-    const backend = resolveLangfuseBackend({
-      settings: { ...this.evaluationSettings, langfuseTracingEnabled: true },
-      storedCredential: raw,
-      privacyLevel: this.evaluationSettings.privacyLevel,
-    });
-    const status = await backend.status();
-    return {
-      connected: status.available,
-      configured: Boolean(raw),
-      endpoint: status.endpoint,
-      error: status.available ? undefined : status.message,
-      message: status.message,
-    };
-  }
-
-  async testEvaluationConnection(): Promise<LangSmithConnectionStatus> {
-    const key = await this.credentials.getCredential('langsmith');
-    const backend = resolveBackend(this.evaluationSettings, key);
-    const status = await backend.status();
-    return {
-      connected: status.available,
-      configured: Boolean(key && this.evaluationSettings.tracingEnabled),
-      project: this.evaluationSettings.langsmithProject,
-      endpoint: status.endpoint,
-      error: status.available ? undefined : status.message,
-      message: status.message,
-    };
-  }
-
-  async listEvaluationExperiments(): Promise<EvaluationExperiment[]> {
-    return this.evaluationStore.listExperiments();
-  }
-
-  async getEvaluationExperiment(
-    input: unknown
-  ): Promise<
-    | {
-        experiment: EvaluationExperiment;
-        runs: EvaluationRun[];
-        results: EvaluationResultRecord[];
-      }
-    | undefined
-  > {
-    const request = requireObject(input);
-    const id = requireString(request.id, 'id');
-    const experiment = await this.evaluationStore.getExperiment(id);
-    if (!experiment) return undefined;
-    return {
-      experiment,
-      runs: await this.evaluationStore.listRuns(id),
-      results: await this.evaluationStore.listResults(id),
-    };
-  }
-
-  async listEvaluationBaselines(): Promise<EvaluationBaseline[]> {
-    return this.evaluationStore.listBaselines();
-  }
-
-  /** V9.1: persisted trace-link lookup for a folio run id (reuses the store; no new correlation). */
-  async getEvaluationTraceLink(input: unknown): Promise<{ runId: string; traceRef?: TraceReference; recordedAt?: number } | undefined> {
-    const request = requireObject(input);
-    const runId = requireString(request.runId, 'runId');
-    const link = await this.evaluationStore.lookupTraceLink(runId);
-    if (!link) return undefined;
-    return { runId: link.runId, traceRef: link.traceRef, recordedAt: link.recordedAt };
-  }
-
-  async submitEvaluationFeedback(input: unknown): Promise<void> {
-    const request = requireObject(input);
-    const caseId = requireString(request.caseId, 'caseId');
-    await this.evaluationStore.addFeedback({
-      id: `feedback-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      caseId,
-      runId: typeof request.runId === 'string' ? request.runId : undefined,
-      verdict: request.verdict === 'bad' ? 'bad' : 'good',
-      note: typeof request.note === 'string' ? request.note : undefined,
-      createdAt: Date.now(),
-    });
-  }
-
-  async listEvaluationFeedback(): Promise<HumanFeedback[]> {
-    return this.evaluationStore.listFeedback();
-  }
-
-  /** Resolve a benchmark case definition for the case-detail view (spec §69). */
-  async getEvaluationCase(input: unknown): Promise<EvaluationCase | undefined> {
-    const request = requireObject(input);
-    const id = requireString(request.id, 'id');
-    for (const entry of embeddedDatasets) {
-      const found = entry.load().cases.find((case_) => case_.id === id);
-      if (found) return found;
-    }
-    const userDatasets = await this.evaluationStore.listDatasets();
-    for (const dataset of userDatasets) {
-      const found = dataset.cases.find((case_) => case_.id === id);
-      if (found) return found;
-    }
-    return undefined;
-  }
-
-  /** Diagnostics: extension/trace/backend availability without secrets (spec §86). */
-  async getEvaluationStatus(): Promise<{
-    backend: EvaluationBackendKind;
-    tracingEnabled: boolean;
-    langfuseTracingEnabled: boolean;
-    privacyLevel: PrivacyLevel;
-    project: string;
-  }> {
-    return {
-      backend: this.evaluationBackend.kind,
-      tracingEnabled: this.evaluationSettings.tracingEnabled,
-      langfuseTracingEnabled: this.evaluationSettings.langfuseTracingEnabled,
-      privacyLevel: this.evaluationSettings.privacyLevel,
-      project: this.evaluationSettings.langsmithProject,
-    };
-  }
-
-  // -------------------------------------------------------------------------
-  // V7 internals
-  // -------------------------------------------------------------------------
-
-  /** Keep the runtime extension list in sync with evaluation settings. */
-  private applyRuntimeExtensions(): void {
-    if (!(this.kernel.runtime instanceof PiRuntimeAdapter)) return;
-    const extra: string[] = [];
-    if (this.evaluationSettings.tracingEnabled) {
-      extra.push(getLangSmithExtensionEntry());
-    }
-    this.kernel.runtime.setExtensions(listBundledPiExtensions(extra));
-  }
-
-  /** Reload LangSmith / Langfuse credentials so the backend reflects storage changes. */
-  private async refreshEvaluationBackend(): Promise<void> {
-    const key = await this.credentials.getCredential('langsmith');
-    const langfuseRaw = await this.credentials.getCredential('langfuse');
-    const langfuse = resolveLangfuseBackend({
-      settings: this.evaluationSettings,
-      storedCredential: langfuseRaw,
-      privacyLevel: this.evaluationSettings.privacyLevel,
-    });
-    this.langfuseBackend = langfuse instanceof LangfuseEvaluationBackend ? langfuse : undefined;
-    const backend = this.langfuseBackend ?? resolveBackend(this.evaluationSettings, key);
-    this.evaluationBackend = backend;
-    this.traceCorrelation = new TraceCorrelationService({
-      backend,
-      store: this.evaluationStore,
-    });
-    void backend.status().catch(() => undefined);
-  }
-
-  /** Observe run lifecycle events and persist redacted evaluation records. */
-  private observeRunEvent(event: AgentEvent): void {
-    if (event.type === 'run_started') {
-      this.evalRuns.set(event.runId, {
-        sessionId: event.sessionId,
-        startedAt: event.timestamp,
-        toolCalls: [],
-        answer: '',
-        input: event.payload.userMessage?.content,
-      });
-      return;
-    }
-    const pending = this.evalRuns.get(event.runId);
-    if (!pending) return;
-    if (event.type === 'tool_started') {
-      pending.toolCalls.push(event.payload.toolCall);
-    } else if (event.type === 'message_completed') {
-      pending.answer = event.payload.answer;
-    } else if (event.type === 'run_completed' || event.type === 'run_failed') {
-      if (event.type === 'run_failed') pending.error = event.payload.error;
-      const completed = event.type === 'run_completed';
-      void this.settleEvaluationRun(event.runId, event.sessionId, completed, event.timestamp);
-    }
-  }
-
-  private async settleEvaluationRun(
-    runId: string,
-    sessionId: string,
-    completed: boolean,
-    endedAt: number
-  ): Promise<void> {
-    const pending = this.evalRuns.get(runId);
-    this.evalRuns.delete(runId);
-    if (!pending) return;
-    const status: EvaluationRunStatus = completed ? 'completed' : 'failed';
-    const toolCalls: ToolCallRecord[] = pending.toolCalls.map((toolCall) => ({
-      id: toolCall.id,
-      toolName: toolCall.toolName,
-      args: toolCall.args,
-      startedAt: toolCall.startedAt,
-      completedAt: toolCall.completedAt,
-      status: toolCall.status === 'success' ? 'success' : 'error',
-      error: toolCall.error,
-      result: toolCall.result,
-    }));
-    const run: EvaluationRun = {
-      id: runId,
-      experimentId: OBSERVABILITY_EXPERIMENT_ID,
-      caseId: '',
-      datasetId: '',
-      status,
-      startedAt: pending.startedAt,
-      completedAt: endedAt,
-      latencyMs: Math.max(0, endedAt - pending.startedAt),
-      answer: this.evaluationRedactor.redactAnswer(pending.answer),
-      toolCalls: toolCalls.map((toolCall) => this.evaluationRedactor.redactToolCall(toolCall)),
-      failureModes: [],
-      error: pending.error,
-    };
+    const provider = requireString(request.provider, 'provider');
+    const modelId = requireString(request.modelId, 'modelId');
+    const rpc = this.requirePiRpc();
+    const startedAt = Date.now();
+    let previousSessionFile: string | undefined;
+    const testSessionFile = join(app.getPath('userData'), 'business-research-pi-sessions', `llm-test-${randomUUID().slice(0, 8)}.jsonl`);
     try {
-      await this.evaluationStore.addRun(run);
-    } catch (error) {
-      mainErrorLog.push({
-        at: Date.now(),
-        source: 'main',
-        message: `Evaluation store write failed: ${error instanceof Error ? error.message : String(error)}`,
-        stack: null,
-      });
-    }
-    const session = await this.kernel.sessions.getSession(sessionId).catch(() => undefined);
-    const threadId = session?.runtimeSessionId;
-    let ref = await this.exportAgentTrace({
-      runId,
-      sessionId,
-      threadId,
-      startedAt: pending.startedAt,
-      completedAt: endedAt,
-      input: pending.input,
-      answer: run.answer,
-      toolCalls: run.toolCalls,
-      error: pending.error,
-      completed,
-    });
-    if (ref) {
-      await this.persistTraceLink(runId, ref);
-    } else {
-      ref = await this.traceCorrelation.recordRun({
-        folioRunId: runId,
-        folioSessionId: sessionId,
-        threadId,
-        startedAt: pending.startedAt,
-        completedAt: endedAt,
-      });
-    }
-    if (ref.backend === 'none' && this.evaluationSettings.tracingEnabled) {
-      mainErrorLog.push({
-        at: Date.now(),
-        source: 'main',
-        message: 'Trace correlation: no LangSmith trace matched the finished run.',
-        stack: null,
-      });
-    }
-    if (this.evaluationSettings.langfuseTracingEnabled && !this.langfuseBackend) {
-      mainErrorLog.push({
-        at: Date.now(),
-        source: 'main',
-        message: 'Langfuse tracing is enabled but credentials are missing or the exporter failed to initialize.',
-        stack: null,
-      });
-    }
-  }
-
-  private async persistTraceLink(
-    runId: string,
-    ref: import('@finagent/core').TraceReference
-  ): Promise<void> {
-    try {
-      await this.evaluationStore.recordTraceLink({ runId, traceRef: ref, recordedAt: Date.now() });
-    } catch (error) {
-      mainErrorLog.push({
-        at: Date.now(),
-        source: 'main',
-        message: `Trace link persist failed: ${error instanceof Error ? error.message : String(error)}`,
-        stack: null,
-      });
-    }
-  }
-
-  private async exportAgentTrace(input: {
-    runId: string;
-    sessionId: string;
-    threadId?: string;
-    startedAt: number;
-    completedAt: number;
-    input?: string;
-    answer?: string;
-    toolCalls: ToolCallRecord[];
-    error?: ApiError;
-    completed: boolean;
-  }): Promise<import('@finagent/core').TraceReference | undefined> {
-    if (!this.langfuseBackend) return undefined;
-    try {
-      const ref = await this.langfuseBackend.exportAgentRun({
-        folioRunId: input.runId,
-        sessionId: input.sessionId,
-        threadId: input.threadId,
-        startedAt: input.startedAt,
-        completedAt: input.completedAt,
-        input: input.input,
-        output: input.answer,
-        toolCalls: input.toolCalls,
-        error: input.error,
-        metadata: {
-          folioRunId: input.runId,
-          folioSessionId: input.sessionId,
-          threadId: input.threadId,
-          runKind: 'normal',
-          folioVersion: currentFolioVersion(),
-        },
-      });
-      if (ref.traceId) {
-        const scores = scoresFromAgentRun({
-          completed: input.completed,
-          toolCalls: input.toolCalls,
-          latencyMs: Math.max(0, input.completedAt - input.startedAt),
-        });
-        await this.langfuseBackend.submitScores(ref.traceId, scores);
+      previousSessionFile = (await rpc.getState()).sessionFile;
+      await rpc.switchSession(testSessionFile);
+      const model = await rpc.setModel(provider, modelId);
+      if (!model || model.provider !== provider || model.id !== modelId) {
+        throw createCodeError('PI_RUNTIME_ERROR', `Model ${provider}/${modelId} is not available.`);
       }
-      return ref;
+      const answer = (await rpc.prompt('Reply with the single word OK.')).answer.trim();
+      return { ok: answer.length > 0, message: answer.length > 0 ? 'Connection verified.' : 'The model returned an empty answer.', provider, modelId, latencyMs: Date.now() - startedAt };
     } catch (error) {
-      mainErrorLog.push({
-        at: Date.now(),
-        source: 'main',
-        message: `Langfuse agent export failed: ${error instanceof Error ? error.message : String(error)}`,
-        stack: null,
-      });
-      return undefined;
+      return { ok: false, message: redactSecrets(error instanceof Error ? error.message : 'Connection test failed.'), provider, modelId, latencyMs: Date.now() - startedAt };
+    } finally {
+      await unlink(testSessionFile).catch(() => undefined);
+      if (previousSessionFile) await rpc.switchSession(previousSessionFile).catch(() => undefined);
     }
   }
-
-  private async exportResearchTrace(result: import('@finagent/shared').ResearchRunResult): Promise<void> {
-    if (!this.langfuseBackend) {
-      if (this.evaluationSettings.langfuseTracingEnabled) {
-        mainErrorLog.push({
-          at: Date.now(),
-          source: 'main',
-          message: 'Langfuse tracing is enabled but no exporter is available; Deep Research completed without a remote trace.',
-          stack: null,
-        });
-      }
-      return;
-    }
-    try {
-      const finishedAt = result.summary.finishedAt ?? Date.now();
-      const ref = await this.langfuseBackend.exportResearchRun({
-        folioRunId: result.summary.id,
-        startedAt: result.summary.startedAt,
-        completedAt: finishedAt,
-        symbol: result.summary.symbol,
-        strategyId: result.report?.strategyId,
-        query: `Deep research ${result.summary.symbol}`,
-        capabilities: result.report?.capabilityRuns.map((run) => ({
-          capabilityId: run.capabilityId,
-          status: run.status,
-          startedAt: run.fetchedAt,
-          finishedAt: run.fetchedAt,
-          error: run.error,
-        })) ?? result.summary.plannedCapabilities.map((id) => ({
-          capabilityId: id,
-          status: result.summary.completedCapabilities.includes(id) ? 'success' : 'unavailable',
-        })),
-        report: result.report,
-        model: this.evaluationSettings.langfuseTracingEnabled ? 'folio-synthesizer' : undefined,
-        metadata: {
-          folioRunId: result.summary.id,
-          runKind: 'normal',
-          folioVersion: currentFolioVersion(),
-          symbol: result.summary.symbol,
-          strategyId: result.report?.strategyId,
-        },
-      });
-      const scores = scoresFromResearchReport(result.report, undefined, Math.max(0, finishedAt - result.summary.startedAt));
-      if (ref.traceId && scores.length > 0) {
-        await this.langfuseBackend.submitScores(ref.traceId, scores);
-      }
-      if (ref.traceId) await this.persistTraceLink(result.summary.id, ref);
-    } catch (error) {
-      mainErrorLog.push({
-        at: Date.now(),
-        source: 'main',
-        message: `Langfuse Deep Research export failed: ${error instanceof Error ? error.message : String(error)}`,
-        stack: null,
-      });
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // Diagnostics (spec §35–36)
-  // -------------------------------------------------------------------------
 
   async collectDiagnostics(): Promise<DiagnosticsBundle> {
     let llmState: LlmRuntimeState | null = null;
     try {
-      llmState = await this.requireLlm().getState();
+      llmState = await this.readLlmState();
     } catch {
-      // Local provider (no Pi runtime) — llm fields stay null.
+      // Diagnostics remain useful before Pi is configured or installed.
     }
-    // V8.1 §40: Pi runtime facts (sanitized). Local backend → all nulls.
-    let piDiag = {
-      status: 'unknown' as 'idle' | 'running' | 'exited' | 'unknown',
-      command: null as string | null,
-      cwd: null as string | null,
-      extensions: [] as string[],
-      providersConfigured: [] as string[],
-      model: null as string | null,
-      lastExitCode: null as number | null,
-      lastExitSignal: null as string | null,
-      stderrTail: null as string | null,
-      observabilityDegraded: null as boolean | null,
-    };
-    if (this.kernel.runtime instanceof PiRuntimeAdapter) {
-      try {
-        piDiag = await this.kernel.runtime.getRuntimeDiagnostics(llmState);
-      } catch {
-        // Diagnostics must never fail because the runtime object slipped.
-      }
-    }
-    let providerSummaries: FinancialProviderSummary[] = [];
-    try {
-      providerSummaries = this.listFinancialProviders();
-    } catch {
-      // Provider wiring lands with the connector slice; empty until then.
-    }
+    const pi = this.readPiDiagnostics(llmState);
     return collectDiagnostics({
       version: app.getVersion(),
       os: process.platform,
       arch: process.arch,
       electronVersion: process.versions.electron ?? null,
-      agentProviderId: readAgentProvider(),
-      agentState: llmState?.runtimeProvider ?? null,
+      agentProviderId: this.provider,
+      agentState: this.businessResearchPiRpc?.isRuntimeAlive() ? 'running' : 'idle',
       llmProviderId: llmState?.model?.provider ?? null,
       llmModel: llmState?.model?.id ?? null,
-      financialProviders: providerSummaries,
-      brokerConnected: providerSummaries.some((p) => p.id === 'longbridge-broker'),
-      brokerAccountCount: providerSummaries.some((p) => p.id === 'longbridge-broker') ? 1 : 0,
-      skillsLoadedCount: this.skillHub.listSkills().length,
-      capabilities: this.registry,
+      capabilities: [
+        'business-research.projects',
+        'business-research.runs',
+        'business-research.evidence',
+        'business-research.reports',
+        'business-research.monitors',
+      ],
       resources: { dev: !app.isPackaged, root: getRuntimeRoot() },
-      evaluation: {
-        backend: this.evaluationBackend.kind,
-        tracingEnabled: this.evaluationSettings.tracingEnabled,
-        privacyLevel: this.evaluationSettings.privacyLevel,
-        project: this.evaluationSettings.langsmithProject,
-        // Connection liveness is probed on demand (testEvaluationConnection);
-        // the bundle only records configured/disabled state (spec §86).
-        connected: null,
-        traceStatus: this.evaluationSettings.tracingEnabled ? 'configured' : 'disabled',
-        datasets: this.evaluationStore
-          ? await this.listEvaluationDatasetIds()
-          : [],
-      },
+      pi,
       errors: mainErrorLog.recent(20),
-      pi: {
-        status: piDiag.status,
-        command: piDiag.command,
-        cwd: piDiag.cwd,
-        extensions: piDiag.extensions,
-        providersConfigured: piDiag.providersConfigured,
-        model: piDiag.model,
-        lastExitCode: piDiag.lastExitCode,
-        lastExitSignal: piDiag.lastExitSignal,
-        stderrTail: piDiag.stderrTail,
-        observabilityDegraded: piDiag.observabilityDegraded,
-      },
     });
   }
 
-  /** V8.1 §40: restart the Pi runtime from Diagnostics. Best-effort. */
   async restartRuntime(): Promise<void> {
-    if (!(this.kernel.runtime instanceof PiRuntimeAdapter)) return;
-    await this.kernel.runtime.restart();
+    await this.businessResearchPiRpc?.restart();
   }
-
-  /** Embedded + user dataset ids for diagnostics (spec §86). */
-  private async listEvaluationDatasetIds(): Promise<string[]> {
-    const ids: string[] = [];
-    for (const entry of embeddedDatasets) {
-      try {
-        ids.push(entry.load().id);
-      } catch {
-        // A broken embedded dataset must not break diagnostics.
-      }
-    }
-    try {
-      const user = await this.evaluationStore.listDatasets();
-      ids.push(...user.map((dataset) => dataset.id));
-    } catch {
-      // Store failures are already logged elsewhere.
-    }
-    return [...new Set(ids)];
-  }
-
-  // -------------------------------------------------------------------------
-  // Environment health check (onboarding step 4, spec §30)
-  // -------------------------------------------------------------------------
-
-  async checkHealth(): Promise<{
-    ai: { ok: boolean; detail: string | null; error: { code: string; message: string } | null };
-    marketData: { ok: boolean; detail: string | null; error: { code: string; message: string } | null };
-    skills: { ok: boolean; detail: string | null; error: { code: string; message: string } | null };
-    agentRuntime: { ok: boolean; detail: string | null; error: { code: string; message: string } | null };
-  }> {
-    const item = (ok: boolean, detail: string | null, error: { code: string; message: string } | null = null) => ({
-      ok,
-      detail,
-      error,
-    });
-
-    let ai = item(false, null, { code: 'LLM_UNAVAILABLE', message: 'LLM control plane unavailable' });
-    try {
-      const state = await this.requireLlm().getState();
-      if (state.runtimeProvider === 'local') {
-        ai = item(true, 'Local agent runtime (no LLM configured)');
-      } else if (state.model) {
-        ai = item(true, `${state.model.provider} · ${state.model.id}`);
-      } else {
-        ai = item(false, null, { code: 'LLM_NO_MODEL', message: 'No model selected' });
-      }
-    } catch {
-      // ai stays failed.
-    }
-
-    let marketData = item(false, null, { code: 'MARKET_DATA_UNAVAILABLE', message: 'Market data check failed' });
-    try {
-      const quoteCapability = this.registry.get('market.quote');
-      if (!quoteCapability) {
-        marketData = item(false, null, { code: 'CAPABILITY_MISSING', message: 'market.quote capability missing' });
-      } else {
-        const outcome = await this.executor.run(quoteCapability, { symbol: 'AAPL.US' }, { timeoutMs: 20_000 });
-        marketData =
-          outcome.record.status === 'success'
-            ? item(true, 'Quote check passed (AAPL.US)')
-            : item(false, null, { code: 'QUOTE_FAILED', message: outcome.record.error ?? 'Quote check failed' });
-      }
-    } catch (error) {
-      marketData = item(false, null, {
-        code: 'QUOTE_FAILED',
-        message: error instanceof Error ? error.message : 'Quote check failed',
-      });
-    }
-
-    const skillsCount = this.skillHub.listSkills().length;
-    const skills = item(
-      skillsCount > 0,
-      skillsCount > 0 ? `${skillsCount} skills loaded` : null,
-      skillsCount > 0 ? null : { code: 'NO_SKILLS', message: 'No skills loaded' }
-    );
-
-    const agentRuntime = item(true, 'Agent kernel running', null);
-
-    return { ai, marketData, skills, agentRuntime };
-  }
-
-  private async hydrateInstrumentCatalog(userData: string): Promise<void> {
-    try {
-      const store = new InstrumentCatalogStore(new JsonFileStore(userData));
-      this.instrumentResolver = await store.load();
-    } catch {
-      // Keep the in-memory seed catalog if persistence is unavailable.
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // Provider connections (spec §8–11)
-  // -------------------------------------------------------------------------
-
-  private async providerHealth(provider: AnyProvider): Promise<ProviderHealth | null> {
-    try {
-      return await provider.status();
-    } catch {
-      return null;
-    }
-  }
-
-  /** Renderer-facing mirror of the Connections IPC contract (ui/client/connections.ts). */
-  private async entryFor(provider: AnyProvider): Promise<ConnectionEntry> {
-    const state = await this.connectionStore.get(provider.id);
-    const health = await this.providerHealth(provider);
-    const coverage =
-      this.providerRouter.coverage().find((c) => c.providerId === provider.id) ?? null;
-    const config = await this.connectionStore.getConfig(provider.id);
-    const routing = await this.connectionStore.getRouting(DEFAULT_PROVIDER_ROUTING);
-    let hasAccount = false;
-    let accountLabel: string | null = null;
-    if (provider.kind === 'broker-account') {
-      try {
-        const accounts = await provider.accounts();
-        if (accounts.ok) {
-          hasAccount = accounts.data.length > 0;
-          accountLabel = accounts.data[0]?.name ?? null;
-        }
-      } catch {
-        // No account info — entry still renders with hasAccount=false.
-      }
-    }
-    return {
-      providerId: provider.id,
-      kind: provider.kind,
-      name: provider.name,
-      status: state?.status ?? health?.status ?? 'not-connected',
-      health,
-      coverage,
-      configurable: provider.id === 'massive',
-      configured:
-        provider.id === 'massive'
-          ? Boolean(await this.credentials.getCredential(MASSIVE_CREDENTIAL_ID))
-          : health?.status === 'connected',
-      hasAccount,
-      accountLabel,
-      error: state?.error ?? null,
-      enabled: config?.enabled !== false,
-      endpoint: config?.endpoint ?? null,
-      region: config?.region ?? health?.region ?? null,
-      routingRole:
-        routing.primary === provider.id
-          ? 'primary'
-          : routing.fallback === provider.id
-            ? 'fallback'
-            : null,
-      recentResult: this.providerRouter.lastResultFor(provider.id) ?? null,
-    };
-  }
-
-  async listConnections(): Promise<ConnectionEntry[]> {
-    return Promise.all(this.providerRouter.list().map((provider) => this.entryFor(provider)));
-  }
-
-  async connectProvider(input: unknown): Promise<{ status: 'connecting' | 'connected'; verificationUrl?: string }> {
-    const request = requireObject(input);
-    const providerId = requireString(request.providerId, 'providerId');
-    if (providerId !== 'longbridge') {
-      throw createCodeError('CONFIG_UNSUPPORTED', 'Connect is only supported for the Longbridge CLI.');
-    }
-    if (this.activeLogin) {
-      throw createCodeError('LOGIN_IN_PROGRESS', 'A Longbridge login is already in progress.');
-    }
-    await this.connectionStore.update({ providerId, status: 'connecting', lastCheck: Date.now() });
-
-    const controller = new AbortController();
-    let resolveUrl: (uri: string | undefined) => void;
-    const urlPromise = new Promise<string | undefined>((resolve) => {
-      resolveUrl = resolve;
-    });
-    const urlTimer = setTimeout(() => resolveUrl(undefined), 30_000);
-
-    const outcomePromise = startLogin({
-      exec: executeLongBridgeCli,
-      spawn: spawnLongbridge,
-      openUrl: (uri) => shell.openExternal(uri),
-      onVerificationUri: (uri) => {
-        clearTimeout(urlTimer);
-        resolveUrl(uri);
-      },
-      signal: controller.signal,
-    });
-    this.activeLogin = {
-      cancel: () => controller.abort(),
-    };
-
-    const verificationUrl = await urlPromise;
-    if (!verificationUrl) {
-      controller.abort();
-      this.activeLogin = null;
-      throw createCodeError('LOGIN_START_FAILED', 'Could not start the Longbridge authorization flow.');
-    }
-
-    // The device flow continues in the background; completion updates the
-    // connection store and pushes `connections:changed` to the renderer.
-    void outcomePromise
-      .then(async (outcome) => {
-        if (outcome.status === 'connected') {
-          await this.connectionStore.update({
-            providerId,
-            status: 'connected',
-            lastCheck: Date.now(),
-            connectedAt: Date.now(),
-          });
-        } else if (outcome.status === 'cancelled') {
-          await this.connectionStore.update({ providerId, status: 'not-connected', lastCheck: Date.now() });
-        } else {
-          await this.connectionStore.update({
-            providerId,
-            status: 'error',
-            lastCheck: Date.now(),
-            error: { code: 'LOGIN_TIMEOUT', message: 'Authorization timed out. Try again.' },
-          });
-        }
-        this.activeLogin = null;
-        void this.pushConnections();
-      })
-      .catch(() => {
-        this.activeLogin = null;
-        void this.pushConnections();
-      });
-
-    return { status: 'connecting', verificationUrl };
-  }
-
-  async cancelConnectProvider(input: unknown): Promise<void> {
-    requireObject(input);
-    this.activeLogin?.cancel();
-  }
-
-  async disconnectProvider(input: unknown): Promise<ConnectionEntry | null> {
-    const request = requireObject(input);
-    const providerId = requireString(request.providerId, 'providerId');
-    const provider = this.providerRouter.get(providerId);
-    if (!provider) return null;
-    if (providerId === 'longbridge') {
-      await longbridgeLogout({ exec: executeLongBridgeCli });
-    } else if (providerId === 'massive') {
-      await this.credentials.removeCredential(MASSIVE_CREDENTIAL_ID);
-    }
-    await this.connectionStore.update({ providerId, status: 'not-connected', lastCheck: Date.now() });
-    return this.entryFor(provider);
-  }
-
-  async testProviderConnection(input: unknown): Promise<ProviderHealth> {
-    const request = requireObject(input);
-    const providerId = requireString(request.providerId, 'providerId');
-    if (providerId === 'longbridge') {
-      const health = await longbridgeTestConnection({ exec: executeLongBridgeCli });
-      const diagnostic: ProviderHealth['diagnostic'] =
-        health.status === 'connected'
-          ? 'healthy'
-          : health.status === 'permission-limited'
-            ? 'partial-failure'
-            : health.status === 'not-connected'
-              ? 'missing-credential'
-              : 'unhealthy';
-      const result = { ...health, diagnostic };
-      await this.persistProviderHealth(providerId, result);
-      return result;
-    }
-    const provider = this.providerRouter.get(providerId);
-    if (!provider) throw createCodeError('UNKNOWN_PROVIDER', 'Unknown provider.');
-    const startedAt = Date.now();
-    if (provider.kind !== 'financial-data') {
-      throw createCodeError('CONFIG_UNSUPPORTED', 'This provider uses the Longbridge connection test.');
-    }
-    const probe = await provider.execute(
-      'market.quote',
-      { symbol: 'AAPL.US' },
-      AbortSignal.timeout(10_000)
-    );
-    const health: ProviderHealth = probe.ok
-      ? {
-          status: 'connected',
-          diagnostic: 'healthy',
-          lastCheck: Date.now(),
-          latencyMs: Date.now() - startedAt,
-          message: 'Production data request succeeded.',
-        }
-      : this.healthFromProviderError(probe.error, startedAt);
-    await this.persistProviderHealth(providerId, health);
-    return health;
-  }
-
-  async setProviderConfig(input: unknown): Promise<ConnectionEntry> {
-    const request = requireObject(input);
-    const providerId = requireString(request.providerId, 'providerId');
-    const config = requireObject(request.config);
-    const provider = this.providerRouter.get(providerId);
-    if (!provider) throw createCodeError('UNKNOWN_PROVIDER', 'Unknown provider.');
-    const existing = await this.connectionStore.getConfig(providerId);
-    const apiKey = typeof config.apiKey === 'string' ? config.apiKey.trim() : undefined;
-    if (apiKey !== undefined) {
-      if (providerId !== 'massive') {
-        throw createCodeError('CONFIG_UNSUPPORTED', 'This provider does not accept API keys.');
-      }
-      if (!apiKey) throw createCodeError('INVALID_ARGUMENT', 'An API key is required.');
-      await this.credentials.setCredential(MASSIVE_CREDENTIAL_ID, apiKey);
-    }
-    const enabled = typeof config.enabled === 'boolean' ? config.enabled : existing?.enabled;
-    const endpoint =
-      typeof config.endpoint === 'string'
-        ? config.endpoint.trim() || undefined
-        : existing?.endpoint;
-    const region =
-      typeof config.region === 'string' ? config.region.trim() || undefined : existing?.region;
-    if (endpoint && !endpoint.startsWith('https://')) {
-      throw createCodeError('INVALID_ARGUMENT', 'Provider endpoint must use HTTPS.');
-    }
-    await this.connectionStore.setConfig(providerId, { enabled, endpoint, region });
-    const routingRole = config.routingRole;
-    if (routingRole === 'primary' || routingRole === 'fallback') {
-      const current = await this.connectionStore.getRouting(DEFAULT_PROVIDER_ROUTING);
-      const next =
-        routingRole === 'primary'
-          ? {
-              primary: providerId,
-              fallback: current.primary === providerId ? current.fallback : current.primary,
-            }
-          : {
-              primary:
-                current.primary === providerId ? (current.fallback ?? providerId) : current.primary,
-              fallback: providerId,
-            };
-      await this.connectionStore.setRouting(next);
-      this.providerRouter.setRouting(next);
-    }
-    await this.connectionStore.update({ providerId, status: 'not-connected', lastCheck: Date.now() });
-    const massive = this.providerRouter.get('massive');
-    if (massive instanceof MassiveFinancialDataProvider) {
-      massive.clearCache();
-    }
-    return this.entryFor(provider);
-  }
-
-  private healthFromProviderError(error: { code: string; message: string }, startedAt: number): ProviderHealth {
-    const diagnostic =
-      error.code === 'CONFIG_MISSING'
-        ? 'missing-credential'
-        : error.code === 'AUTH_EXPIRED'
-          ? 'authentication-failed'
-          : error.code === 'RATE_LIMITED'
-            ? 'rate-limited'
-            : error.code === 'ACCESS_DENIED'
-              ? 'partial-failure'
-              : error.code === 'TIMEOUT' || error.code === 'UNKNOWN'
-                ? 'unreachable'
-                : 'unhealthy';
-    return {
-      status:
-        error.code === 'AUTH_EXPIRED'
-          ? 'expired'
-          : error.code === 'ACCESS_DENIED'
-            ? 'permission-limited'
-            : 'error',
-      diagnostic,
-      diagnosticCode: error.code,
-      lastCheck: Date.now(),
-      latencyMs: Date.now() - startedAt,
-      message: redactSecrets(error.message),
-    };
-  }
-
-  private async persistProviderHealth(providerId: string, health: ProviderHealth): Promise<void> {
-    await this.connectionStore.update({
-      providerId,
-      status: health.status,
-      lastCheck: health.lastCheck,
-      connectedAt: health.status === 'connected' ? health.lastCheck : undefined,
-      error:
-        health.diagnosticCode && health.status !== 'connected'
-          ? {
-              code: health.diagnosticCode,
-              message: redactSecrets(health.message ?? 'Provider check failed.'),
-            }
-          : undefined,
-    });
-    void this.pushConnections();
-  }
-
-  async coverageMatrix(): Promise<ProviderCoverage[]> {
-    return this.providerRouter.coverage();
-  }
-
-  // -------------------------------------------------------------------------
-  // V5: screening / diff / outcome / import (spec §5–49)
-  // -------------------------------------------------------------------------
-
-  async screeningRun(input: unknown): Promise<ScreeningRun> {
-    const request = requireObject(input);
-    const strategy = requireString(request.strategy, 'strategy');
-    if (!SCREENING_STRATEGIES.some((def) => def.id === strategy)) {
-      throw createCodeError('SCREENING_STRATEGY_INVALID', `Unknown screening strategy: ${strategy}`);
-    }
-    const query: ScreeningQuery = {
-      strategy: strategy as ScreeningStrategy,
-      universe: Array.isArray(request.universe) ? request.universe.map(String) : undefined,
-      market: typeof request.market === 'string' ? request.market : undefined,
-      filters: isRecord(request.filters) ? request.filters : undefined,
-      limit: typeof request.limit === 'number' ? request.limit : 20,
-    };
-    return this.screeningService.runScreening(query);
-  }
-
-  async screeningListRuns(): Promise<ScreeningRun[]> {
-    return this.screeningService.listRuns();
-  }
-
-  async screeningGetRun(input: unknown): Promise<ScreeningRun | undefined> {
-    const request = requireObject(input);
-    return this.screeningService.getRun(requireString(request.runId, 'runId'));
-  }
-
-  async researchGetDiff(input: unknown): Promise<ResearchDiff | undefined> {
-    const request = requireObject(input);
-    const symbol = requireString(request.symbol, 'symbol').toUpperCase();
-    const cached = await this.diffRepository.getBySymbol(symbol);
-    if (cached) return cached;
-    // Fallback: build on demand from the two latest reports.
-    const reports = await this.researchService.listReports(symbol);
-    if (reports.length < 2) return undefined;
-    const sorted = [...reports].sort((a, b) => b.generatedAt - a.generatedAt);
-    const diff = await buildDiff(sorted[1]!, sorted[0]!, {
-      thesis: await this.latestThesisFor(symbol),
-    });
-    await this.diffRepository.save(diff);
-    return diff;
-  }
-
-  async outcomeListOpinions(input: unknown): Promise<ResearchOpinion[]> {
-    const request = isRecord(input) ? input : {};
-    return this.outcomeRepository.listOpinions(
-      typeof request.symbol === 'string' ? request.symbol.toUpperCase() : undefined
-    );
-  }
-
-  async outcomeListOutcomes(input: unknown): Promise<ResearchOutcome[]> {
-    const request = isRecord(input) ? input : {};
-    return this.outcomeRepository.listOutcomes(
-      typeof request.symbol === 'string' ? request.symbol.toUpperCase() : undefined
-    );
-  }
-
-  async outcomeEvaluateDue(): Promise<ResearchOutcome[]> {
-    return this.outcomeService.evaluateDue(undefined, this.fetchOutcomeHistory);
-  }
-
-  async importParse(input: unknown): Promise<PortfolioImportDraft> {
-    const request = requireObject(input);
-    const source = requireString(request.source, 'source');
-    const text = requireString(request.text, 'text');
-    let rows: PortfolioImportRow[];
-    if (source === 'csv') {
-      rows = parseCsv(text);
-    } else if (source === 'paste') {
-      rows = parsePaste(text);
-    } else {
-      throw createCodeError('IMPORT_SOURCE_INVALID', 'Unsupported import source.');
-    }
-    return createDraft(source as ImportSource, rows);
-  }
-
-  async importConfirm(input: unknown): Promise<ManualPortfolio> {
-    const request = requireObject(input);
-    const draft = requireObject(request.draft) as unknown as PortfolioImportDraft;
-    const name = requireString(request.name, 'name');
-    const rows = Array.isArray(draft.rows) ? draft.rows : [];
-    if (rows.length === 0) {
-      throw createCodeError('IMPORT_EMPTY', 'Nothing to import — the draft has no rows.');
-    }
-    const holdings: Holding[] = rows
-      .filter((row) => row.symbol && row.issues.length === 0)
-      .map((row) => ({
-        symbol: row.symbol.toUpperCase(),
-        name: row.name ?? '',
-        currency: row.currency,
-        quantity: row.quantity,
-        costPrice: row.costPrice,
-      }));
-    return this.importRepository.create({ name, holdings });
-  }
-
-  async listManualPortfolios(): Promise<ManualPortfolio[]> {
-    return this.importRepository.list();
-  }
-
-  private async latestThesisFor(symbol: string): Promise<InvestmentThesis | undefined> {
-    try {
-      const theses = await this.thesisRepository.getBySymbol(symbol);
-      return theses[0];
-    } catch {
-      return undefined;
-    }
-  }
-
-  /** Persist a diff when a symbol gets a NEW report over an older one (spec §17–19). */
-  private async saveDiffForReport(report: ResearchReport): Promise<void> {
-    try {
-      const older = (await this.researchService.listReports(report.symbol))
-        .filter((other) => other.id !== report.id)
-        .sort((a, b) => b.generatedAt - a.generatedAt);
-      if (older.length === 0) return;
-      const diff = await buildDiff(older[0]!, report, {
-        thesis: await this.latestThesisFor(report.symbol),
-      });
-      await this.diffRepository.save(diff);
-    } catch {
-      // Diff persistence is best-effort; the UI can build on demand.
-    }
-  }
-
-  /** Historical daily bars for outcome evaluation (spec §32). */
-  private fetchOutcomeHistory: HistoryFetcher = async (symbol) => {
-    const capability = this.registry.get('market.kline');
-    if (!capability) return null;
-    const outcome = await this.executor.run(
-      capability,
-      { symbol, period: '1d', limit: 200 },
-      { timeoutMs: 20_000 }
-    );
-    if (outcome.record.status !== 'success' || !outcome.result) return null;
-    return (outcome.result.data as Kline[] | undefined) ?? null;
-  };
-
-  // -------------------------------------------------------------------------
-  // V5 Phase 2: pulse / performance / automation / export (spec §21–55)
-  // -------------------------------------------------------------------------
-
-  async pulseSnapshot(input: unknown): Promise<MarketPulseSnapshot> {
-    const request = isRecord(input) ? input : {};
-    const watchlistRaw = Array.isArray(request.watchlist) ? request.watchlist : undefined;
-    const watchlist: WatchlistQuote[] = Array.isArray(watchlistRaw)
-      ? (watchlistRaw as unknown as WatchlistQuote[])
-      : [];
-    const portfolioSummary = isRecord(request.portfolioSummary)
-      ? (request.portfolioSummary as unknown as PortfolioSnapshot)
-      : undefined;
-    return this.pulseService.snapshot({
-      watchlist,
-      portfolioSummary,
-      market: 'US',
-    });
-  }
-
-  async performanceSkillPerformance(input: unknown): Promise<SkillPerformance[]> {
-    const request = isRecord(input) ? input : {};
-    const horizon = request.horizon;
-    if (horizon !== '1w' && horizon !== '1m' && horizon !== '3m') {
-      throw createCodeError('PERFORMANCE_HORIZON_INVALID', 'Horizon must be 1w, 1m, or 3m.');
-    }
-    return this.performanceService.skillPerformance(horizon);
-  }
-
-  async performanceStrategyPerformance(input: unknown): Promise<StrategyPerformance[]> {
-    const request = isRecord(input) ? input : {};
-    const horizon = request.horizon;
-    if (horizon !== '1w' && horizon !== '1m' && horizon !== '3m') {
-      throw createCodeError('PERFORMANCE_HORIZON_INVALID', 'Horizon must be 1w, 1m, or 3m.');
-    }
-    return this.performanceService.strategyPerformance(horizon);
-  }
-
-  async performanceSkillCalibration(input: unknown): Promise<SkillCalibration[]> {
-    const request = isRecord(input) ? input : {};
-    const horizon = request.horizon;
-    if (horizon !== '1w' && horizon !== '1m' && horizon !== '3m') {
-      throw createCodeError('PERFORMANCE_HORIZON_INVALID', 'Horizon must be 1w, 1m, or 3m.');
-    }
-    const opinions = await this.outcomeRepository.listOpinions();
-    const outcomes = await this.outcomeRepository.listOutcomes();
-    return computeSkillCalibrations(opinions, outcomes, horizon);
-  }
-
-  async performanceStrategyCalibration(input: unknown): Promise<StrategyCalibration[]> {
-    const request = isRecord(input) ? input : {};
-    const horizon = request.horizon;
-    if (horizon !== '1w' && horizon !== '1m' && horizon !== '3m') {
-      throw createCodeError('PERFORMANCE_HORIZON_INVALID', 'Horizon must be 1w, 1m, or 3m.');
-    }
-    const opinions = await this.outcomeRepository.listOpinions();
-    const outcomes = await this.outcomeRepository.listOutcomes();
-    return computeStrategyCalibrations(opinions, outcomes, horizon);
-  }
-
-  async automationListRules(): Promise<AutomationRule[]> {
-    return this.automationRules.list();
-  }
-
-  async automationSaveRule(input: unknown): Promise<AutomationRule> {
-    const request = requireObject(input);
-    const rule = request.rule as unknown as AutomationRule;
-    if (!rule || typeof rule.type !== 'string') {
-      throw createCodeError('AUTOMATION_RULE_INVALID', 'A valid automation rule is required.');
-    }
-    return this.automationRules.save(rule);
-  }
-
-  async automationRemoveRule(input: unknown): Promise<void> {
-    const request = requireObject(input);
-    await this.automationRules.remove(requireString(request.ruleId, 'ruleId'));
-  }
-
-  async automationRunRule(input: unknown): Promise<AutomationRun> {
-    const request = requireObject(input);
-    const ruleId = requireString(request.ruleId, 'ruleId');
-    const rule = (await this.automationRules.list()).find((r) => r.id === ruleId);
-    if (!rule) throw createCodeError('AUTOMATION_RULE_NOT_FOUND', 'Unknown automation rule.');
-    const run = await this.executeAutomation(rule);
-    await this.automationRuns.record(run);
-    return run;
-  }
-
-  async automationListRuns(): Promise<AutomationRun[]> {
-    return this.automationRuns.list();
-  }
-
-  async automationBuildBrief(): Promise<DailyBrief> {
-    const [runs, alerts, diffs] = await Promise.all([
-      this.automationRuns.list(),
-      this.alertEventLog.list(),
-      this.diffRepository.list(),
-    ]);
-    let portfolio: BriefPortfolioSummary[] = [];
-    try {
-      const snapshot = await this.marketData.getPortfolio();
-      const holdings = snapshot.holdings ?? [];
-      const total = snapshot.totalAssets;
-      portfolio = holdings
-        .filter((holding) => typeof holding.marketValue === 'number' && typeof total === 'number')
-        .map((holding) => ({
-          label: `${holding.symbol} · ${(((holding.marketValue ?? 0) / (total ?? 1)) * 100).toFixed(1)}% of portfolio`,
-          symbol: holding.symbol,
-        }));
-    } catch {
-      // No portfolio — brief renders without the portfolio section.
-    }
-    return buildBrief({ runs, alerts, diffs, portfolio, movers: [] }, Date.now());
-  }
-
-  async exportMarkdown(input: unknown): Promise<string> {
-    const request = requireObject(input);
-    const report = await this.researchService.getReport(requireString(request.reportId, 'reportId'));
-    if (!report) throw createCodeError('REPORT_NOT_FOUND', 'Unknown research report.');
-    return reportToMarkdown(redactForShare(report));
-  }
-
-  async exportShareCard(input: unknown): Promise<ShareCard> {
-    const request = requireObject(input);
-    const report = await this.researchService.getReport(requireString(request.reportId, 'reportId'));
-    if (!report) throw createCodeError('REPORT_NOT_FOUND', 'Unknown research report.');
-    return reportToShareCard(redactForShare(report));
-  }
-
-  private async seedAutomationRules(): Promise<void> {
-    try {
-      const existing = await this.automationRules.list();
-      if (existing.length > 0) return;
-      const now = Date.now();
-      const defaults: AutomationRule[] = [
-        {
-          id: 'watchlist-daily-review',
-          type: 'watchlist-daily-review',
-          enabled: true,
-          hour: DEFAULT_BRIEF_HOUR,
-          days: [...WEEKDAYS],
-          symbols: ['AAPL.US', 'TSLA.US', 'NVDA.US'],
-          strategyId: 'comprehensive',
-          notify: 'material-only',
-          createdAt: now,
-        },
-        {
-          id: 'portfolio-daily-brief',
-          type: 'portfolio-daily-brief',
-          enabled: true,
-          hour: DEFAULT_BRIEF_HOUR,
-          days: [...WEEKDAYS],
-          strategyId: 'comprehensive',
-          notify: 'material-only',
-          createdAt: now,
-        },
-        {
-          id: 'weekly-thesis-review',
-          type: 'weekly-thesis-review',
-          enabled: true,
-          hour: THESIS_REVIEW_HOUR,
-          days: [THESIS_REVIEW_DAY],
-          strategyId: 'risk-review',
-          notify: 'material-only',
-          createdAt: now,
-        },
-        {
-          id: 'pre-earnings-research',
-          type: 'pre-earnings-research',
-          enabled: true,
-          strategyId: 'earnings',
-          notify: 'material-only',
-          createdAt: now,
-        },
-        {
-          id: 'post-earnings-research',
-          type: 'post-earnings-research',
-          enabled: true,
-          strategyId: 'earnings',
-          notify: 'material-only',
-          createdAt: now,
-        },
-      ];
-      for (const rule of defaults) {
-        await this.automationRules.save(rule);
-      }
-    } catch {
-      // Seeding is best-effort; rules can be created in the UI.
-    }
-  }
-
-  private startAutomationScheduler(): void {
-    this.automationTimer = setInterval(() => {
-      void this.tickAutomations();
-    }, 60_000);
-  }
-
-  private async tickAutomations(): Promise<void> {
-    try {
-      const rules = await this.automationRules.list();
-      const now = Date.now();
-      const todayKey = new Date(now).toDateString();
-      for (const rule of runDue(rules, now)) {
-        if (this.lastAutomationRunByRule.get(rule.id) === todayKey) continue;
-        try {
-          const run = await this.executeAutomation(rule);
-          await this.automationRuns.record(run);
-          this.lastAutomationRunByRule.set(rule.id, todayKey);
-        } catch {
-          // A failing rule never blocks the other rules.
-        }
-      }
-    } catch {
-      // Scheduler tick is best-effort.
-    }
-  }
-
-  private async executeAutomation(rule: AutomationRule): Promise<AutomationRun> {
-    return runAutomation(rule, {
-      registry: this.registry,
-      diffRepo: this.diffRepository,
-      locale: await this.effectiveRunLocale(),
-      researchStart: async (symbol, strategyId) => this.researchService.start(symbol, strategyId, await this.effectiveRunLocale()),
-      notify: (event) => void this.dispatchNotification(event),
-      portfolioSnapshot: async () => {
-        try {
-          const snapshot = await this.marketData.getPortfolio();
-          return {
-            symbols: (snapshot.holdings ?? []).map((holding) => holding.symbol),
-            fetchedAt: snapshot.fetchedAt,
-          };
-        } catch {
-          return null;
-        }
-      },
-      thesisSymbols: async () => {
-        try {
-          const summaries = await this.thesisRepository.list();
-          return summaries.map((thesis) => thesis.symbol);
-        } catch {
-          return [];
-        }
-      },
-    });
-  }
-
-  /** Unified V5 notification dispatcher (spec §56–57): OS + in-app push. */
-  private dispatchNotification(event: NotificationEvent): void {
-    try {
-      if (Notification.isSupported()) {
-        new Notification({ title: event.title, body: event.message }).show();
-      }
-    } catch {
-      // OS notification best-effort.
-    }
-    if (this.window && !this.window.isDestroyed()) {
-      this.window.webContents.send('notification:event', event);
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // Onboarding persistence (spec §27–30, §42) — main-side so the flag
-  // survives restarts regardless of web-storage behavior in packaged builds.
-  // -------------------------------------------------------------------------
-
-  async getOnboardingCompleted(): Promise<boolean> {
-    const store = new JsonFileStore(app.getPath('userData'));
-    const file = await store.read<{ completed?: boolean }>('onboarding.json', {});
-    return file.completed === true;
-  }
-
-  async setOnboardingCompleted(input: unknown): Promise<void> {
-    const request = requireObject(input);
-    const completed = request.completed === true;
-    const store = new JsonFileStore(app.getPath('userData'));
-    await store.write('onboarding.json', { completed });
-  }
-
-  // -------------------------------------------------------------------------
-  // App preferences (V8 spec §14–16): main-owned so the effective locale is
-  // known by OS notifications, dialogs, and the agent runtime — not just the
-  // renderer. Stored alongside onboarding in userData (JsonFileStore).
-  // -------------------------------------------------------------------------
 
   async getAppPreferences(): Promise<AppPreferencesSnapshot> {
     return this.appPreferences.get();
@@ -2808,146 +540,109 @@ export class AgentKernelHost {
 
   async updateAppPreferences(input: unknown): Promise<AppPreferencesSnapshot> {
     const request = requireObject(input);
-    if (!isLocalePreference(request.locale)) {
-      throw createCodeError('INVALID_ARGUMENT', 'Invalid locale preference.');
-    }
+    if (!isLocalePreference(request.locale)) throw createCodeError('INVALID_ARGUMENT', 'Invalid locale preference.');
     return this.appPreferences.update(request.locale);
   }
 
-  private async pushConnections(): Promise<void> {
-    try {
-      const entries = await this.listConnections();
-      if (this.window && !this.window.isDestroyed()) {
-        this.window.webContents.send('connections:changed', entries);
-      }
-    } catch {
-      // Push is best-effort; the UI can re-list on demand.
+  private async readLlmState(): Promise<LlmRuntimeState> {
+    const state = await this.requirePiRpc().getState();
+    return {
+      runtimeProvider: 'pi-runtime',
+      ...(state.model === undefined ? {} : { model: state.model }),
+      thinkingLevel: state.thinkingLevel ?? 'off',
+      availableThinkingLevels: thinkingLevels(state.model?.thinkingLevelMap),
+      isStreaming: state.isStreaming ?? false,
+      ...(state.sessionId === undefined ? {} : { sessionId: state.sessionId }),
+      ...(state.messageCount === undefined ? {} : { messageCount: state.messageCount }),
+    };
+  }
+
+  private requirePiRpc(): PiRpcClient {
+    if (!this.businessResearchPiRpc) {
+      throw createCodeError('LLM_UNAVAILABLE', 'Configure the Pi model runtime to use a live research model.');
     }
+    return this.businessResearchPiRpc;
   }
 
-  private listFinancialProviders(): FinancialProviderSummary[] {
-    return this.providerRouter.list().map((provider) => {
-      const coverage = this.providerRouter.coverage().find((c) => c.providerId === provider.id);
+  private readPiDiagnostics(llmState: LlmRuntimeState | null) {
+    const rpc = this.businessResearchPiRpc;
+    if (!rpc) {
       return {
-        id: provider.id,
-        status: provider.kind,
-        coverage: {
-          capabilities: coverage?.capabilities ?? [],
-          markets: (coverage?.markets ?? []).map((m) => m.id),
-        },
+        status: 'idle' as const,
+        command: null,
+        cwd: null,
+        extensions: [],
+        providersConfigured: [],
+        model: null,
+        lastExitCode: null,
+        lastExitSignal: null,
+        stderrTail: null,
       };
-    });
+    }
+    const launch = rpc.getLaunchInfo();
+    const exit = rpc.getLastExitInfo();
+    const stderr = rpc.getRecentStderr();
+    return {
+      status: rpc.isRuntimeAlive() ? 'running' as const : exit ? 'exited' as const : 'idle' as const,
+      command: `${launch.command} ${launch.args.join(' ')}`.slice(0, 400),
+      cwd: launch.cwd,
+      extensions: launch.extensions,
+      providersConfigured: llmState?.model?.provider ? [llmState.model.provider] : [],
+      model: llmState?.model?.id ?? null,
+      lastExitCode: exit?.code ?? null,
+      lastExitSignal: exit?.signal ?? null,
+      stderrTail: stderr.length > 0 ? stderr.slice(-2000) : null,
+    };
   }
 
-  // -------------------------------------------------------------------------
-  // Skills
-  // -------------------------------------------------------------------------
-
-  async listSkills() {
-    const metadataById = new Map(this.skillHub.listSkillMetadata().map((m) => [m.id, m]));
-    return this.skillHub.listSkills().map((skill) => {
-      const meta = metadataById.get(skill.id);
-      return {
-        id: skill.id,
-        name: skill.name,
-        keywords: skill.trigger.keywords,
-        enabled: skill.metadata.enabled,
-        description: meta?.description ?? '',
-        riskLevel: meta?.riskLevel,
-        tier: meta?.tier,
-        version: meta?.version,
-        author: meta?.author,
-      };
-    });
+  private createCredentialBackedBraveTools(): BusinessResearchToolPort {
+    let tools: Promise<BusinessResearchToolPort> | undefined;
+    const getTools = () => {
+      tools ??= this.credentials
+        .getCredential(BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID)
+        .then((apiKey) => createBraveBusinessResearchTools({ apiKey: apiKey ?? '' }));
+      return tools;
+    };
+    return {
+      searchWeb: async (query, signal) => (await getTools()).searchWeb(query, signal),
+      openSource: async (evidenceId, signal) => (await getTools()).openSource(evidenceId, signal),
+    };
   }
 
-  async setSkillEnabled(input: unknown): Promise<void> {
-    const request = requireObject(input);
-    await this.skillHub.setEnabled(
-      requireString(request.skillId, 'skillId'),
-      request.enabled === true
-    );
-  }
-
-  async listSkillResources(skillId: unknown) {
-    return this.skillHub.listSkillResources(requireString(skillId, 'skillId'));
-  }
-
-  async readSkillResource(skillId: unknown, relativePath: unknown) {
-    return this.skillHub.readSkillResource(
-      requireString(skillId, 'skillId'),
-      requireString(relativePath, 'relativePath')
-    );
-  }
-
-  // -------------------------------------------------------------------------
-
-  /** Runtime env for each Pi spawn: Folio-owned provider overrides + skills dir. */
   private async buildRuntimeEnv(): Promise<NodeJS.ProcessEnv> {
     const overrides: Array<Record<string, unknown>> = [];
-    const baseUrlEnv = process.env.ANTHROPIC_BASE_URL;
-    if (baseUrlEnv) {
-      overrides.push({ provider: 'anthropic', baseUrl: baseUrlEnv });
-    }
+    if (process.env.ANTHROPIC_BASE_URL) overrides.push({ provider: 'anthropic', baseUrl: process.env.ANTHROPIC_BASE_URL });
     for (const provider of await this.credentials.listCustomProviders()) {
-      overrides.push({
-        provider: provider.name,
-        baseUrl: provider.baseUrl,
-        apiKey: provider.apiKey,
-        api: provider.api,
-        models: provider.models,
-      });
+      overrides.push({ provider: provider.name, baseUrl: provider.baseUrl, api: provider.api, apiKey: provider.apiKey, models: provider.models });
     }
     for (const info of await this.credentials.listCredentials()) {
       if (info.custom) continue;
       const apiKey = await this.credentials.getCredential(info.provider);
-      if (!apiKey) continue;
-      overrides.push({ provider: info.provider, apiKey });
+      if (apiKey) overrides.push({ provider: info.provider, apiKey });
     }
-    const env: NodeJS.ProcessEnv = {
-      FINAGENT_SKILLS_DIR: getSkillsDir(),
+    return {
+      ...(process.env.FINAGENT_PI_COMMAND === undefined ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
       FINAGENT_PROVIDER_OVERRIDES: overrides.length > 0 ? JSON.stringify(overrides) : '',
-      // V7: the Finagent extension enforces tool-output privacy from this flag
-      // (spec §60) — always set so the level is unambiguous.
-      FINAGENT_PRIVACY_LEVEL: this.evaluationSettings.privacyLevel,
+      FINAGENT_BUSINESS_RESEARCH_ONLY: '1',
+      FINAGENT_BRAVE_SEARCH_API_KEY: await this.credentials.getCredential(BUSINESS_RESEARCH_BRAVE_CREDENTIAL_ID) ?? '',
     };
-    // V7: LangSmith tracing env (spec §13). Config comes from safeStorage-backed
-    // settings; the extension reads these at Pi process start, so toggling
-    // tracing restarts the runtime (see setEvaluationSettings). Trace metadata
-    // is app-level only — run-level data flows through TraceCorrelationService.
-    if (this.evaluationSettings.tracingEnabled) {
-      const key = await this.credentials.getCredential('langsmith');
-      if (key) {
-        env.TRACE_TO_LANGSMITH = 'true';
-        env.LANGSMITH_PI_API_KEY = key;
-        env.LANGSMITH_PI_PROJECT = this.evaluationSettings.langsmithProject;
-        if (this.evaluationSettings.langsmithEndpoint) {
-          env.LANGSMITH_PI_ENDPOINT = this.evaluationSettings.langsmithEndpoint;
-        }
-        env.LANGSMITH_PI_METADATA = JSON.stringify({
-          app: 'folio',
-          environment: 'production',
-          privacyLevel: this.evaluationSettings.privacyLevel,
-        });
-      }
-    }
-    return env;
   }
+}
 
-  async dispose() {
-    this.alertEngine.stop();
-    await this.businessResearchScheduler.dispose();
-    await this.businessResearchService.dispose();
-    await this.businessResearchPiRpc?.dispose();
-    this.unsubscribe?.();
-    this.unsubscribe = null;
-    this.unsubscribeEval?.();
-    this.unsubscribeEval = null;
-    this.streamUnsubscribe?.();
-    this.streamUnsubscribe = null;
-    this.window = null;
-    await this.kernel.dispose();
-  }
+function createBusinessResearchPiArgs(sessionDirectory: string, useBundledPiRuntime: boolean): string[] {
+  const entryOrPackage = useBundledPiRuntime
+    ? resolveBundledPiCliEntry(app.getAppPath())
+    : '@earendil-works/pi-coding-agent';
+  const args = [entryOrPackage, '--mode', 'rpc', '--provider', process.env.FINAGENT_PI_PROVIDER ?? 'anthropic'];
+  const model = process.env.FINAGENT_PI_MODEL ?? process.env.ANTHROPIC_MODEL;
+  if (model) args.push('--model', model);
+  args.push('--extension', getPiExtensionEntry(), '--session-dir', sessionDirectory);
+  return args;
+}
+
+function thinkingLevels(levelMap?: Record<string, string | null>): string[] {
+  if (!levelMap || Object.keys(levelMap).length === 0) return [...DEFAULT_THINKING_LEVELS];
+  return ['off', ...Object.entries(levelMap).filter(([, mapping]) => mapping !== null).map(([level]) => level)];
 }
 
 function requireBusinessResearchId<Kind extends BusinessResearchIdKind>(kind: Kind, value: unknown) {
@@ -2956,184 +651,18 @@ function requireBusinessResearchId<Kind extends BusinessResearchIdKind>(kind: Ki
   return parsed;
 }
 
-function createBusinessResearchPiArgs(sessionDirectory: string): string[] {
-  const args = [
-    '@mariozechner/pi-coding-agent',
-    '--mode',
-    'rpc',
-    '--provider',
-    process.env.FINAGENT_PI_PROVIDER ?? 'anthropic',
-  ];
-  const model = process.env.FINAGENT_PI_MODEL ?? process.env.ANTHROPIC_MODEL;
-  if (model) args.push('--model', model);
-  args.push('--extension', getPiExtensionEntry(), '--session-dir', sessionDirectory);
-  return args;
-}
-
-function createCredentialBackedBraveTools(
-  getApiKey: () => Promise<string | undefined>,
-): BusinessResearchToolPort {
-  let tools: Promise<BusinessResearchToolPort> | undefined;
-  const getTools = () => {
-    tools ??= getApiKey().then((apiKey) => createBraveBusinessResearchTools({ apiKey: apiKey ?? '' }));
-    return tools;
-  };
-  return {
-    searchWeb: async (query, signal) => (await getTools()).searchWeb(query, signal),
-    openSource: async (evidenceId, signal) => (await getTools()).openSource(evidenceId, signal),
-  };
-}
-
-export async function retryTransientMonitorProbe<T>(signal: AbortSignal, action: () => Promise<T>): Promise<T> {
-  try {
-    return await action();
-  } catch (error) {
-    const code = isCodeError(error) ? error.code : '';
-    if (signal.aborted || code !== 'PROVIDER_UNAVAILABLE') throw error;
-    await waitForMonitorRetry(signal);
-    return action();
-  }
-}
-
-function waitForMonitorRetry(signal: AbortSignal): Promise<void> {
-  if (signal.aborted) return Promise.reject(createCodeError('BUSINESS_RESEARCH_CANCELLED', 'Monitoring check cancelled.'));
-  return new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      signal.removeEventListener('abort', abort);
-      resolve();
-    }, 200);
-    const abort = () => {
-      clearTimeout(timer);
-      signal.removeEventListener('abort', abort);
-      reject(createCodeError('BUSINESS_RESEARCH_CANCELLED', 'Monitoring check cancelled.'));
-    };
-    signal.addEventListener('abort', abort, { once: true });
-  });
-}
-
-function getLongBridgeStatusAction(status: string) {
-  switch (status) {
-    case 'not_installed':
-      return 'Install the LongBridge CLI (longbridge --help) and authenticate with longbridge auth login.';
-    case 'not_authed':
-      return 'Run longbridge auth login to authenticate the LongBridge CLI.';
-    case 'rate_limited':
-      return 'LongBridge is rate-limited; market data requests are paused. Try again later.';
-    default:
-      return undefined;
-  }
-}
-
-export function toIpcError(error: unknown): IpcFailure['error'] {
-  if (isCodeError(error)) {
-    return {
-      code: error.code,
-      message: redactSecrets(error.message),
-      action: error.action,
-    };
-  }
-  if (error instanceof Error) {
-    return {
-      code: 'INTERNAL_ERROR',
-      message: redactSecrets(error.message),
-    };
-  }
-  return {
-    code: 'INTERNAL_ERROR',
-    message: redactSecrets(String(error)),
-  };
-}
-
-/**
- * Main-process error ring buffer (spec §43). IPC failures and service errors
- * are pushed here already redacted; the diagnostics collector ships the last
- * 20 entries. Renderer-side errors stay renderer-side.
- */
-export const mainErrorLog = new ErrorLog();
-
-export async function toIpcResult<T>(operation: () => Promise<T> | T): Promise<IpcResult<T>> {
-  try {
-    const data = await operation();
-    return { ok: true, data };
-  } catch (error) {
-    const ipcError = toIpcError(error);
-    mainErrorLog.push({
-      at: Date.now(),
-      source: 'main',
-      message: ipcError.message,
-      stack: error instanceof Error ? (error.stack ?? null) : null,
-    });
-    return { ok: false, error: ipcError };
-  }
-}
-
-function readAgentProvider() {
-  const value = process.env.FINAGENT_AGENT_PROVIDER;
-  return value === 'local' ? 'local' : 'pi-runtime';
-}
-
-/** Real CLI exec for the Longbridge providers (main process only). */
-const executeLongBridgeCli: LongbridgeExec = (args, options) =>
-  executeLongBridge(args, { timeout: options?.timeout });
-
-/** Spawn the Longbridge CLI; stdout chunks stream to the login flow. */
-const spawnLongbridge: SpawnFn = (args, onStdout) => {
-  const child = spawn('longbridge', args, { stdio: ['ignore', 'pipe', 'pipe'] });
-  child.stdout.on('data', (chunk: Buffer) => onStdout(chunk.toString()));
-  child.stderr.resume();
-  return { kill: () => child.kill() };
-};
-
-function readRequiredLlmEnvKeys() {
-  return process.env.FINAGENT_LLM_ENV_KEYS?.split(',')
-    .map((key) => key.trim())
-    .filter(Boolean) ?? [];
-}
-
-function isApiResult<T>(value: unknown): value is ApiResult<T> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'ok' in value
-  );
-}
-
-function requireString(value: unknown, field: string) {
-  if (typeof value !== 'string' || value.length === 0) {
-    throw createCodeError('INVALID_ARGUMENT', `${field} must be a non-empty string.`);
-  }
-  return value;
-}
-
 function requireObject(value: unknown): Record<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw createCodeError('INVALID_ARGUMENT', 'Expected an object payload.');
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw createCodeError('INVALID_ARGUMENT', 'Expected an object.');
   }
   return value as Record<string, unknown>;
 }
 
-function isSameOrChildPath(candidate: string, parent: string): boolean {
-  const childPath = relative(parent, candidate);
-  return childPath === '' || (!childPath.startsWith(`..${sep}`) && childPath !== '..' && !isAbsolute(childPath));
+function requireString(value: unknown, field: string): string {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw createCodeError('INVALID_ARGUMENT', `${field} must be a non-empty string.`);
+  }
+  return value.trim();
 }
 
-function createCodeError(code: string, message: string, action?: string) {
-  const error = new Error(message) as Error & { code: string; action?: string };
-  error.code = code;
-  if (action) error.action = action;
-  return error;
-}
-
-function isCodeError(error: unknown): error is Error & { code: string; action?: string } {
-  return error instanceof Error && typeof (error as { code?: unknown }).code === 'string';
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && typeof (error as NodeJS.ErrnoException).code === 'string';
-}
-
-// -- V3 prompt builders ------------------------------------------------------
-// Pure builders live in ./research-prompts.ts (imported at the top) so the
-// security guard-rail contract is unit-testable without the electron shell.
-
-export { isApiResult };
+export { toIpcError, toIpcResult, mainErrorLog } from './ipcResult.ts';

@@ -150,7 +150,7 @@ async function openLiveProfile(profileDirectory) {
     if (!page) throw new Error('The business-research window did not open.');
     await page.waitForLoadState('domcontentloaded');
     await page.waitForFunction(() => Boolean(window.electronAPI?.businessResearch), null, { timeout: 30_000 });
-    console.log('Configure the model provider in Settings and the Brave key in Market Intelligence.');
+    console.log('Configure a model in Settings → Models, create a project, switch the Agent to Live research, and save the Brave Search key in the project-scope card.');
     console.log('Credentials are stored by the app in this dedicated profile, not in the marker or repository.');
     prompt = createInterface({ input: stdin, output: stdout });
     await prompt.question('When configuration is saved, press Enter here to close the setup window. ');

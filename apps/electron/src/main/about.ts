@@ -1,7 +1,7 @@
 import { app, ipcMain } from 'electron';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { toIpcResult } from './kernelHost.ts';
+import { toIpcResult } from './ipcResult.ts';
 
 export interface AboutInfo {
   version: string;
@@ -10,7 +10,7 @@ export interface AboutInfo {
 }
 
 /**
- * Release channel for this build. `marketIntelligenceAgent.channel` in
+ * Release channel for this build. `enterpriseResearchWorkbench.channel` in
  * apps/electron/package.json is the declared source of truth (`internal` |
  * `alpha` | `beta` | `stable`); it is baked
  * into the packed app via extraMetadata and read here at runtime. `FINAGENT_CHANNEL`
@@ -21,7 +21,7 @@ const DEFAULT_CHANNEL = 'alpha';
 function readProductField(field: string): string | undefined {
   try {
     const pkg = JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8'));
-    const value = pkg?.marketIntelligenceAgent?.[field];
+    const value = pkg?.enterpriseResearchWorkbench?.[field];
     if (typeof value === 'string' && value.length > 0) return value;
   } catch {
     // Dev entry may point at src/main; fall through to env/default.
@@ -34,7 +34,7 @@ function readChannel(): string {
 }
 
 function readBuildSha(): string {
-  // CI bakes the exact git SHA via extraMetadata (`marketIntelligenceAgent.buildSha`); a local or
+  // CI bakes the exact git SHA via extraMetadata (`enterpriseResearchWorkbench.buildSha`); a local or
   // dev build reports `dev`.
   return process.env.FINAGENT_BUILD_SHA ?? readProductField('buildSha') ?? 'dev';
 }

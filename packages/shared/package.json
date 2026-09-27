@@ -6,25 +6,15 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./capabilities": "./src/capabilities/index.ts",
     "./resources": "./src/resources/index.ts",
-    "./thesis": "./src/thesis/index.ts",
-    "./research-diff": "./src/research-diff/index.ts",
-    "./compare": "./src/compare/index.ts",
-    "./portfolio-risk": "./src/portfolio-risk/index.ts",
-    "./portfolio-import": "./src/portfolio-import/index.ts",
+    "./agent/errors": "./src/agent/errors.ts",
+    "./agent/pi-rpc-client": "./src/agent/pi-rpc-client.ts",
+    "./storage/json-file-store": "./src/storage/json-file-store.ts",
     "./business-research": "./src/business-research/index.ts",
-    "./diagnostics": "./src/diagnostics/index.ts",
-    "./providers/longbridge": "./src/providers/longbridge/index.ts",
-    "./providers/massive": "./src/providers/massive/index.ts"
+    "./diagnostics": "./src/diagnostics/index.ts"
   },
   "dependencies": {
-    "@finagent/core": "workspace:*",
-    "@finagent/i18n": "workspace:*",
-    "@finagent/longbridge-tools": "workspace:*",
-    "@sinclair/typebox": "^0.34.0",
-    "zod": "^3.23.0",
-    "@finagent/skill-hub": "workspace:*"
+    "@finagent/core": "workspace:*"
   },
   "scripts": {
     "test": "bun test",

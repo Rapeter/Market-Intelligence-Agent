@@ -1,1 +1,0 @@
-longbridge calc-index NVDA.US --format json

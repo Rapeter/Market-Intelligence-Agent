@@ -1,102 +1,67 @@
 #!/usr/bin/env node
-// Market Intelligence Agent release packaging (spec §38).
-//
-//   bun run release:package
-//
-// Builds the full app (renderer + preload + main + extension), packages it
-// with electron-builder (mac: `dir` for internal runs + `dmg` for release,
-// unsigned `identity=null`), then stages the DMG(s) and a `shasum -a 256`
-// checksum manifest under `dist/release/`.
-//
-// Signing/notarization are opt-in via environment (CI injects Apple secrets):
-//   APPLE_CERTIFICATE_BASE64        -> CSC_LINK (p12, base64)
-//   APPLE_CERT_PASSWORD             -> CSC_KEY_PASSWORD
-//   APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID -> notarization
-// When the certificate secrets are absent the app is built unsigned. Secrets
-// are never logged or echoed; electron-builder consumes them from the process
-// environment only.
+// Windows-only release packaging for Enterprise Research Workbench.
+// Builds the app, creates an unsigned NSIS installer, and stages SHA-256 sums.
 
+import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+if (process.platform !== 'win32') {
+  throw new Error('Windows is the only supported desktop packaging target. Run this script on Windows.');
+}
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..');
 const electronRoot = join(repoRoot, 'apps', 'electron');
 const electronDist = join(repoRoot, 'dist', 'electron');
-const releaseDir = join(repoRoot, 'dist', 'release');
+const releaseDirectory = join(repoRoot, 'dist', 'release');
 
-function run(command, args, cwd, env) {
-  const label = `${command} ${args.join(' ')}`;
-  console.log(`\n> ${label}`);
-  execFileSync(command, args, {
-    cwd,
-    env: env ?? process.env,
-    stdio: 'inherit',
-  });
+function run(command, args, cwd, env = process.env) {
+  console.log(`\n> ${command} ${args.join(' ')}`);
+  execFileSync(command, args, { cwd, env, stdio: 'inherit' });
 }
 
-// 1. Canonical build: packages + renderer + preload + main.
 run('bun', ['run', 'build'], repoRoot);
-
-// 2. Bundle the Pi extension (shipped via extraResources).
 run('bun', ['run', 'build:extension'], electronRoot);
 
-// 3. Package with electron-builder (dir + dmg). Sign only when a certificate is
-//    provided; otherwise `identity=null` (from package.json) keeps it unsigned.
-const signingEnabled = Boolean(
-  process.env.APPLE_CERTIFICATE_BASE64 && process.env.APPLE_CERT_PASSWORD
-);
-
-const builderArgs = [];
-const builderEnv = { ...process.env };
-if (signingEnabled) {
-  // Override `identity=null` so electron-builder auto-discovers the Developer ID
-  // certificate imported from CSC_LINK.
-  builderArgs.push('--config.mac.identity=');
-  builderEnv.CSC_LINK = process.env.APPLE_CERTIFICATE_BASE64;
-  builderEnv.CSC_KEY_PASSWORD = process.env.APPLE_CERT_PASSWORD;
-  builderEnv.CSC_IDENTITY_AUTO_DISCOVERY = 'true';
+const builderArgs = ['run', 'package:builder', '--win', 'nsis'];
+if (process.env.FINAGENT_SKIP_WIN_RESOURCE_EDIT === '1') {
+  // Restricted Windows accounts may be unable to unpack electron-builder's
+  // legacy winCodeSign bundle because it contains macOS symlinks. Keep the
+  // normal branded build as the default; allow an explicit runtime-equivalent
+  // unsigned package smoke that skips PE icon/version metadata editing.
+  builderArgs.push('--config.win.signAndEditExecutable=false');
+  console.warn('FINAGENT_SKIP_WIN_RESOURCE_EDIT=1: skipping Windows executable icon/version metadata editing for this build.');
 }
-
-// Bake the exact git SHA + channel into the packed package.json
-// (marketIntelligenceAgent.buildSha / marketIntelligenceAgent.channel) so the About view reports real values at runtime without a
-// build-time env var. CI injects both; local builds keep the source values.
 if (process.env.FINAGENT_BUILD_SHA) {
-  builderArgs.push(
-    `--config.extraMetadata.marketIntelligenceAgent.buildSha=${process.env.FINAGENT_BUILD_SHA}`
-  );
+  builderArgs.push(`--config.extraMetadata.enterpriseResearchWorkbench.buildSha=${process.env.FINAGENT_BUILD_SHA}`);
 }
 if (process.env.FINAGENT_CHANNEL) {
-  builderArgs.push(
-    `--config.extraMetadata.marketIntelligenceAgent.channel=${process.env.FINAGENT_CHANNEL}`
-  );
+  builderArgs.push(`--config.extraMetadata.enterpriseResearchWorkbench.channel=${process.env.FINAGENT_CHANNEL}`);
 }
+run('bun', builderArgs, electronRoot);
 
-run('bun', ['run', 'package:builder', ...builderArgs], electronRoot, builderEnv);
+mkdirSync(releaseDirectory, { recursive: true });
+const installers = readdirSync(electronDist, { withFileTypes: true })
+  .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.exe'))
+  .map((entry) => entry.name);
+if (installers.length === 0) throw new Error(`No Windows installer .exe was produced in ${electronDist}.`);
 
-// 4. Stage DMG(s) + SHA256SUMS.txt under dist/release/.
-mkdirSync(releaseDir, { recursive: true });
-
-const dmgs = readdirSync(electronDist).filter((name) => name.endsWith('.dmg'));
-if (dmgs.length === 0) {
-  console.error('\nrelease:package FAILED — electron-builder produced no .dmg under dist/electron/.');
-  process.exit(1);
+const manifest = [];
+for (const installer of installers) {
+  const source = join(electronDist, installer);
+  if (!statSync(source).isFile()) continue;
+  const target = join(releaseDirectory, installer);
+  copyFileSync(source, target);
+  const digest = createHash('sha256').update(readFileSync(target)).digest('hex');
+  manifest.push(`${digest}  ${installer}`);
 }
+if (manifest.length === 0) throw new Error('No Windows installer was staged for release.');
 
-for (const dmg of dmgs) {
-  copyFileSync(join(electronDist, dmg), join(releaseDir, dmg));
-}
-
-// `shasum -a 256` output format (bare filenames, two-space separator) so the
-// manifest is verifiable with `shasum -c SHA256SUMS.txt` from dist/release/.
-const shasum = execFileSync('shasum', ['-a', '256', ...dmgs], {
-  cwd: releaseDir,
-  encoding: 'utf8',
-});
-writeFileSync(join(releaseDir, 'SHA256SUMS.txt'), shasum);
-
-console.log(`\nrelease:package OK — ${dmgs.join(', ')} staged in ${releaseDir}`);
-console.log(`Signing: ${signingEnabled ? 'enabled' : 'disabled (unsigned)'}`);
-console.log('Checksums:\n' + shasum);
+const sums = `${manifest.sort().join('\n')}\n`;
+writeFileSync(join(releaseDirectory, 'SHA256SUMS.txt'), sums, 'utf8');
+console.log(`\nrelease:package OK — ${installers.join(', ')} staged in ${releaseDirectory}`);
+console.log('Windows installers are unsigned. Verify SHA256SUMS.txt before distributing.');
+console.log(`Checksums:\n${sums}`);

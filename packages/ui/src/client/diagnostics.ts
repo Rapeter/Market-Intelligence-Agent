@@ -16,15 +16,6 @@ export interface DiagnosticsErrorEntry {
   stack: string | null;
 }
 
-export interface DiagnosticsFinancialProvider {
-  id: string;
-  status: string;
-  coverage: {
-    capabilities: string[];
-    markets: string[];
-  };
-}
-
 export interface DiagnosticsBundle {
   collectedAt: string;
   app: {
@@ -46,15 +37,6 @@ export interface DiagnosticsBundle {
       id: string | null;
       model: string | null;
     };
-    financial: DiagnosticsFinancialProvider[];
-    broker: {
-      connected: boolean;
-      accountCount: number;
-    };
-    longbridgeCliVersion: string | null;
-  };
-  skills: {
-    loaded: number;
   };
   capabilities: {
     available: string[];
@@ -65,7 +47,7 @@ export interface DiagnosticsBundle {
   };
   /** V8.1 §40: Pi runtime facts (sanitized). */
   pi: {
-    status: 'idle' | 'running' | 'exited' | 'unknown';
+    status: 'idle' | 'running' | 'exited' | 'restarting' | 'unknown';
     command: string | null;
     cwd: string | null;
     extensions: string[];
@@ -74,7 +56,6 @@ export interface DiagnosticsBundle {
     lastExitCode: number | null;
     lastExitSignal: string | null;
     stderrTail: string | null;
-    observabilityDegraded: boolean | null;
   };
   errors: DiagnosticsErrorEntry[];
   redaction: {

@@ -1,1 +1,0 @@
-longbridge depth NVDA.US --format json

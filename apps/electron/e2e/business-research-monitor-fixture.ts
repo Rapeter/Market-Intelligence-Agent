@@ -65,7 +65,13 @@ const scheduler = new BusinessResearchScheduler(repository, service, {
 });
 
 try {
-  const subscription = await service.subscribe(task, { intervalMs: HOUR });
+  const project = await service.createProject({
+    title: 'Monitor attribution fixture',
+    industry: task.industry,
+    competitors: task.competitors,
+  });
+  const subscription = await service.subscribe(task, { intervalMs: HOUR, projectId: project.id });
+  assert.equal(subscription.projectId, project.id);
   const checks: Array<Record<string, unknown>> = [];
   const elapsed: number[] = [];
 
@@ -109,6 +115,7 @@ try {
   assert.equal(persistedRuns.length, 2);
   assert.equal(persistedChecks.length, 3);
   assert.ok(persistedRuns.every((run) => run.mode === 'fixture'));
+  assert.ok(persistedRuns.every((run) => run.projectId === project.id), 'Monitor-triggered runs must retain their subscription project.');
   assert.ok(persistedRuns.every((run) => run.reportId));
 
   mkdirSync(outputDirectory, { recursive: true });
@@ -118,8 +125,10 @@ try {
     fixtureFiles: ['monitor-v1.json', 'monitor-v2.json'],
     snapshotSource: 'apps/electron/e2e/fixtures/business-research',
     networkRequests: 0,
+    projectId: project.id,
     probeCalls,
     researchRunsPersisted: persistedRuns.length,
+    triggeredRunsRetainProject: persistedRuns.every((run) => run.projectId === project.id),
     checksPersisted: persistedChecks.length,
     duplicateSuppressed: persistedRuns.length === 2 && persistedChecks[2]?.decision.reason === 'duplicate_signal',
     elapsedMs: elapsed,

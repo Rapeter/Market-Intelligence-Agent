@@ -28,12 +28,14 @@ describe('business research preload surface', () => {
       calls.push({ channel, args });
       return { ok: true };
     });
-    await api.start({ task: { industry: 'EV', question: 'Compare updates', competitors: ['A', 'B'] }, mode: 'fixture' });
+    await api.createProject({ title: 'EV entry', industry: 'EV', competitors: ['A', 'B'] });
+    await api.start({ task: { industry: 'EV', question: 'Compare updates', competitors: ['A', 'B'] }, mode: 'fixture', projectId: 'project-1', parentRunId: 'run-0' });
     await api.listEvents({ runId: 'run-1' });
     await api.setBraveKey({ apiKey: 'brave-secret-value' });
 
     expect(calls).toEqual([
-      { channel: 'businessResearch:start', args: [{ task: { industry: 'EV', question: 'Compare updates', competitors: ['A', 'B'] }, mode: 'fixture' }] },
+      { channel: 'businessResearch:createProject', args: [{ title: 'EV entry', industry: 'EV', competitors: ['A', 'B'] }] },
+      { channel: 'businessResearch:start', args: [{ task: { industry: 'EV', question: 'Compare updates', competitors: ['A', 'B'] }, mode: 'fixture', projectId: 'project-1', parentRunId: 'run-0' }] },
       { channel: 'businessResearch:listEvents', args: [{ runId: 'run-1' }] },
       { channel: 'businessResearch:setBraveKey', args: [{ apiKey: 'brave-secret-value' }] },
     ]);

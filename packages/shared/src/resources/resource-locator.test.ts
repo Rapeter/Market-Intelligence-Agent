@@ -1,22 +1,27 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import {
   getPiCwd,
   getPiExtensionEntry,
   getRuntimeRoot,
-  getSkillsDir,
   isPackaged,
 } from './resource-locator.ts';
 
 const PACKAGED = 'FINAGENT_PACKAGED';
 const saved = process.env[PACKAGED];
+const resourcesPathDescriptor = Object.getOwnPropertyDescriptor(process, 'resourcesPath');
 
 afterEach(() => {
   if (saved === undefined) {
     delete process.env[PACKAGED];
   } else {
     process.env[PACKAGED] = saved;
+  }
+  if (resourcesPathDescriptor === undefined) {
+    Reflect.deleteProperty(process, 'resourcesPath');
+  } else {
+    Object.defineProperty(process, 'resourcesPath', resourcesPathDescriptor);
   }
 });
 
@@ -25,7 +30,6 @@ describe('ResourceLocator (dev mode)', () => {
     delete process.env[PACKAGED];
     // Bun tests run under the repo root; the module must not depend on it.
     const root = getRuntimeRoot();
-    expect(getSkillsDir()).toBe(resolve(root, 'skills'));
     expect(getPiCwd()).toBe(root);
   });
 
@@ -57,5 +61,27 @@ describe('ResourceLocator (dev mode)', () => {
     process.env[PACKAGED] = '1';
     // No process.resourcesPath in a bare Node/Bun process -> still dev.
     expect(isPackaged()).toBe(false);
+  });
+});
+
+describe('ResourceLocator (packaged mode)', () => {
+  it('resolves the shipped Pi extension under a Windows resources directory', () => {
+    const resourcesPath = 'C:\\Program Files\\Enterprise Research Workbench\\resources';
+    process.env[PACKAGED] = '1';
+    Object.defineProperty(process, 'resourcesPath', { configurable: true, value: resourcesPath });
+
+    expect(isPackaged()).toBe(true);
+    expect(getRuntimeRoot()).toBe(resourcesPath);
+    expect(getPiCwd()).toBe(resourcesPath);
+    expect(getPiExtensionEntry()).toBe(join(resourcesPath, 'extensions', 'finagent', 'index.js'));
+  });
+
+  it('keeps the macOS resources folder name recognized case-insensitively', () => {
+    const resourcesPath = '/Applications/Enterprise Research Workbench.app/Contents/Resources';
+    process.env[PACKAGED] = '1';
+    Object.defineProperty(process, 'resourcesPath', { configurable: true, value: resourcesPath });
+
+    expect(isPackaged()).toBe(true);
+    expect(getRuntimeRoot()).toBe(resourcesPath);
   });
 });

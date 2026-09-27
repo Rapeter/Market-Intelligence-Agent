@@ -60,13 +60,6 @@ async function readConfiguredModel(page) {
   return { provider: model.provider, id: model.id };
 }
 
-async function completeFirstRunSetup(page) {
-  const overlay = page.getByTestId('onboarding-overlay');
-  if (await overlay.isVisible()) {
-    throw new Error('Complete the first-run onboarding in the dedicated profile, then rerun live acceptance.');
-  }
-}
-
 function buildAcceptanceArtifact({ model, counterfactual, monitor, elapsedMs }) {
   return {
     schemaVersion: 1,
@@ -131,25 +124,37 @@ async function main() {
     page = context.pages()[0] ?? await context.waitForEvent('page', { timeout: 30_000 });
     await page.waitForLoadState('domcontentloaded');
     await page.waitForFunction(() => Boolean(window.electronAPI?.businessResearchLiveE2e), null, { timeout: 30_000 });
-    await completeFirstRunSetup(page);
 
     const model = await readConfiguredModel(page);
     const braveStatus = await invokeBusinessResearch(page, 'getCredentialStatus');
-    assert.equal(braveStatus.configured, true, 'Configure Brave Search in Market Intelligence before acceptance.');
+    assert.equal(braveStatus.configured, true, 'Configure Brave Search in the live project-scope card before acceptance.');
 
     const counterfactual = await invokeLiveE2e(page, 'runCounterfactualProbes', { task: acceptanceTask });
     assert.equal(counterfactual.pairs?.length, 2, 'Two evidence counterfactual pairs are required.');
     assert.equal(counterfactual.pairs.filter((pair) => pair.diverged).length, 2,
       'Both same-task pairs must produce a different valid next decision or search direction.');
 
+    const projectTitle = 'Live public-source acceptance';
+    const projects = await invokeBusinessResearch(page, 'listProjects');
+    const project = projects.find((item) => item.title === projectTitle
+      && item.industry === acceptanceTask.industry
+      && item.competitors.join('\0') === acceptanceTask.competitors.join('\0'))
+      ?? await invokeBusinessResearch(page, 'createProject', {
+        title: projectTitle,
+        industry: acceptanceTask.industry,
+        competitors: acceptanceTask.competitors,
+      });
     const subscription = await invokeBusinessResearch(page, 'subscribe', {
       task: acceptanceTask,
       intervalMs: 60 * 60 * 1_000,
+      projectId: project.id,
     });
+    assert.equal(subscription.projectId, project.id, 'Live monitoring subscription lost its project attribution.');
     subscriptionId = subscription.id;
     const monitor = await invokeLiveE2e(page, 'checkSubscriptionNow', { subscriptionId });
     assert.equal(monitor.check?.decision?.kind, 'trigger', 'The real public probe did not trigger follow-up research.');
     assert.equal(monitor.followUpRun?.mode, 'live', 'Monitor follow-up was not a live research run.');
+    assert.equal(monitor.followUpRun?.projectId, project.id, 'Monitor-triggered live research did not remain in its project.');
     assert.ok(['completed', 'partial'].includes(monitor.followUpRun?.status),
       `Live monitor follow-up did not produce a report: ${monitor.followUpRun?.status ?? 'missing run'}`);
     assert.equal(typeof monitor.followUpRun?.reportId, 'string', 'Live monitor follow-up did not persist a report.');

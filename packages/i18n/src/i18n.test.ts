@@ -9,8 +9,8 @@ describe('i18n instance (spec §4–5, §19)', () => {
     const zh = createSyncI18n({ locale: 'zh-CN' });
     expect(en.t('common.save')).toBe('Save');
     expect(zh.t('common.save')).toBe('保存');
-    expect(en.t('navigation.portfolio')).toBe('Portfolio');
-    expect(zh.t('navigation.portfolio')).toBe('投资组合');
+    expect(en.t('navigation.agentPanel')).toBe('Research agent');
+    expect(zh.t('navigation.agentPanel')).toBe('研究 Agent');
   });
 
   it('resolves nested keys', () => {
@@ -20,9 +20,9 @@ describe('i18n instance (spec §4–5, §19)', () => {
 
   it('supports instant language switch on the same instance', async () => {
     const inst = createSyncI18n({ locale: 'en-US' });
-    expect(inst.t('navigation.today')).toBe('Today');
+    expect(inst.t('navigation.settings')).toBe('Settings');
     await inst.changeLanguage('zh-CN');
-    expect(inst.t('navigation.today')).toBe('今日');
+    expect(inst.t('navigation.settings')).toBe('设置');
   });
 
   it('falls back to en-US for a missing key so raw keys never leak (spec §82)', () => {
@@ -37,7 +37,7 @@ describe('i18n instance (spec §4–5, §19)', () => {
 describe('error code → message resolution (spec §50–51)', () => {
   it('covers every known error code in the static table', () => {
     // Every code maps to a string resource both locales define.
-    expect(Object.keys(ERROR_CODE_TO_KEY).length).toBeGreaterThan(25);
+    expect(Object.keys(ERROR_CODE_TO_KEY).length).toBeGreaterThan(15);
     const en = createSyncI18n({ locale: 'en-US' });
     const zh = createSyncI18n({ locale: 'zh-CN' });
     for (const key of new Set(Object.values(ERROR_CODE_TO_KEY))) {

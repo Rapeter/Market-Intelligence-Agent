@@ -122,7 +122,7 @@ describe('Pi business research adapter', () => {
       .rejects.toMatchObject({ code: 'BUSINESS_RESEARCH_INVALID_DECISION' });
 
     rpc.answer = '{"kind":"finish","rationale":"done"}';
-    rpc.toolCalls = [{ toolName: 'get_quote' }];
+    rpc.toolCalls = [{ toolName: 'unsupported_external_tool' }];
     await expect(model.decide({ task, observations: [], allowedActions: ['finish'] }, new AbortController().signal))
       .rejects.toMatchObject({ code: 'BUSINESS_RESEARCH_TOOL_NOT_ALLOWED' });
   });

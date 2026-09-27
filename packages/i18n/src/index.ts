@@ -1,5 +1,5 @@
 /**
- * @finagent/i18n — Folio V8 internationalization kernel (spec §7).
+ * @finagent/i18n — shared internationalization utilities for the research workbench.
  *
  * Renderer + Electron Main + tests share this one package so translations and
  * locale rules never drift. Feature agents import formatters and the locale

@@ -1,5 +1,7 @@
 import { atom } from 'jotai';
 import type {
+  BusinessResearchProject,
+  BusinessResearchProjectId,
   BusinessResearchRunMode,
   BusinessResearchStrategyId,
 } from '@finagent/core';
@@ -13,21 +15,23 @@ import type {
 } from '@finagent/shared/business-research';
 
 export interface BusinessResearchFormState {
-  industry: string;
   question: string;
-  competitorsText: string;
   strategyId: BusinessResearchStrategyId;
 }
 
 export const businessResearchFormAtom = atom<BusinessResearchFormState>({
-  industry: '',
   question: '',
-  competitorsText: '',
   strategyId: 'industry_overview',
 });
 
 /** The workspace opens in network-free demonstration mode; live search is explicit. */
 export const businessResearchModeAtom = atom<BusinessResearchRunMode>('fixture');
+export const businessResearchProjectsAtom = atom<BusinessResearchProject[]>([]);
+export const selectedBusinessResearchProjectIdAtom = atom<BusinessResearchProjectId | null>(null);
+export const selectedBusinessResearchProjectAtom = atom((get) => {
+  const selectedId = get(selectedBusinessResearchProjectIdAtom);
+  return selectedId === null ? undefined : get(businessResearchProjectsAtom).find((project) => project.id === selectedId);
+});
 export const businessResearchRunsAtom = atom<BusinessResearchRunRecord[]>([]);
 export const businessResearchReportsAtom = atom<BusinessResearchReport[]>([]);
 export const businessResearchEventsAtom = atom<BusinessResearchEvent[]>([]);

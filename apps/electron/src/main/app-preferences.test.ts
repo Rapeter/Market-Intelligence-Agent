@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect } from 'bun:test';
-import { JsonFileStore } from '@finagent/shared';
+import { JsonFileStore } from '@finagent/shared/storage/json-file-store';
 import { createAppPreferencesService } from './app-preferences.ts';
 
 function makeService(systemLocale = 'en-US') {

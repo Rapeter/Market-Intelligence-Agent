@@ -1,4 +1,4 @@
-name: Release
+name: Windows Release
 
 on:
   push:
@@ -10,88 +10,77 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-latest
+    runs-on: windows-latest
     timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: '1.4.2'
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Unit/integration tests
+      - name: Unit and integration tests
         run: bun run test:unit
 
       - name: Typecheck
         run: bun run typecheck
 
+      - name: Localization parity
+        run: bun run i18n:check
+
       - name: Build
         run: bun run build
 
-      - name: Electron E2E (local provider)
-        working-directory: apps/electron
+      - name: Enterprise research Electron E2E
         run: bun run test:e2e
-        env:
-          FINAGENT_AGENT_PROVIDER: local
 
-      # Signing/notarization are opt-in: a build is only releaseable when every
-      # Apple secret is present. The values are consumed below; never echo them.
-      - name: Classify build (signed vs internal)
-        id: buildtype
-        run: |
-          if [ -n "$APPLE_CERTIFICATE_BASE64" ] && [ -n "$APPLE_CERT_PASSWORD" ] && [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
-            echo "internal=false" >> "$GITHUB_OUTPUT"
-            echo "channel=beta" >> "$GITHUB_OUTPUT"
-          else
-            echo "internal=true" >> "$GITHUB_OUTPUT"
-            echo "channel=internal" >> "$GITHUB_OUTPUT"
-          fi
-        env:
-          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
-          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-
-      - name: Package (DMG + checksums)
+      - name: Package Windows installer and checksums
         run: bun run release:package
         env:
           FINAGENT_BUILD_SHA: ${{ github.sha }}
-          FINAGENT_CHANNEL: ${{ steps.buildtype.outputs.channel }}
-          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
-          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          FINAGENT_CHANNEL: alpha
 
-      - name: Packaged smoke
-        working-directory: apps/electron
+      - name: Packaged Windows smoke test
         run: bun run test:package-smoke
 
-      - name: Verify checksums
-        working-directory: dist/release
-        run: shasum -a 256 -c SHA256SUMS.txt
+      - name: Clean NSIS installer install/uninstall smoke
+        run: bun run test:installer-smoke
+
+      - name: Verify installer checksums
+        shell: pwsh
+        run: |
+          $releasePath = Resolve-Path 'dist/release'
+          $manifest = Join-Path $releasePath 'SHA256SUMS.txt'
+          if (-not (Test-Path -LiteralPath $manifest)) { throw 'SHA256SUMS.txt was not created.' }
+          foreach ($line in Get-Content -LiteralPath $manifest) {
+            if ($line -notmatch '^([0-9a-f]{64})  (.+)$') { throw "Invalid checksum row: $line" }
+            $expected = $Matches[1]
+            $name = $Matches[2]
+            $file = Join-Path $releasePath $name
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing installer: $name" }
+            $actual = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -ne $expected) { throw "Checksum mismatch for $name" }
+          }
 
       - name: Write release notes
+        shell: pwsh
         run: |
-          if [ "${{ steps.buildtype.outputs.internal }}" = "true" ]; then
-            printf '%s\n\n%s\n' "# Market Intelligence Agent ${{ github.ref_name }}" "INTERNAL BUILD — NOT RELEASEABLE" > release-notes.md
-          else
-            printf '%s\n\n%s\n' "# Market Intelligence Agent ${{ github.ref_name }}" "Signed and notarized." > release-notes.md
-          fi
+          @'
+          # Enterprise Research Workbench ${{ github.ref_name }}
+
+          Windows installer build. This installer is unsigned; verify `SHA256SUMS.txt` before installation.
+          '@ | Set-Content -LiteralPath 'release-notes.md' -Encoding utf8
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/release/*.dmg
+            dist/release/*.exe
             dist/release/SHA256SUMS.txt
           body_path: release-notes.md
         env:

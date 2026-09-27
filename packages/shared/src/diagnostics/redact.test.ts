@@ -57,12 +57,12 @@ describe('redact', () => {
   });
 
   it('leaves normal fields untouched', () => {
-    expect(redact('AAPL.US')).toBe('AAPL.US');
+    expect(redact('Acme.example')).toBe('Acme.example');
     expect(redact('United States')).toBe('United States');
     expect(redact('claude-3-5-sonnet-20241022')).toBe('claude-3-5-sonnet-20241022');
     expect(redact('0.17.0')).toBe('0.17.0');
     expect(redact('anthropic')).toBe('anthropic');
-    expect(redact('market.quote')).toBe('market.quote');
+    expect(redact('research.public_sources')).toBe('research.public_sources');
   });
 
   it('is idempotent', () => {

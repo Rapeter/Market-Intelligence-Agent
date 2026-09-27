@@ -778,7 +778,7 @@ function readDefaultPiArgs(extensions: string[] = readDefaultPiExtensions()) {
   if (explicitArgs) return explicitArgs;
 
   const args = [
-    '@mariozechner/pi-coding-agent',
+    '@earendil-works/pi-coding-agent',
     '--mode',
     'rpc',
     '--provider',

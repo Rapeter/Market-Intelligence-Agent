@@ -1,1 +1,0 @@
-longbridge institution-rating NVDA.US --format json

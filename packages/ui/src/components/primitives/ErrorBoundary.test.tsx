@@ -2,11 +2,13 @@ import { afterAll, describe, expect, it } from 'bun:test';
 import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
+import { I18nextProvider } from 'react-i18next';
+import { createSyncI18n } from '@finagent/i18n';
 import { ErrorBoundary } from './ErrorBoundary';
 import { installHappyDom } from '../../test/setupHappyDom';
-import { withI18n } from '../../test/i18n';
 
 const happyDom = installHappyDom();
+const i18n = createSyncI18n({ locale: 'en-US' });
 afterAll(() => happyDom.restore());
 
 let shouldThrow = true;
@@ -21,7 +23,7 @@ function renderBoundary(children: React.ReactNode): { container: HTMLElement; ro
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => {
-    root.render(withI18n(<ErrorBoundary>{children}</ErrorBoundary>));
+    root.render(<I18nextProvider i18n={i18n}><ErrorBoundary>{children}</ErrorBoundary></I18nextProvider>);
   });
   return { container, root };
 }

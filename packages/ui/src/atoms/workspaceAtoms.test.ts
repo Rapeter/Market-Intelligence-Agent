@@ -1,55 +1,26 @@
 import { createStore } from 'jotai';
 import { describe, expect, it } from 'bun:test';
-import {
-  activeSymbolAtom,
-  activeViewAtom,
-  selectedPositionAtom,
-  workspaceContextAtom,
-  navSectionAtom,
-  agentPanelVisibleAtom,
-} from './workspaceAtoms';
-import { compareSymbolsAtom } from './compareAtoms';
+import { agentPanelVisibleAtom, navSectionAtom, settingsTabAtom } from './workspaceAtoms';
 
-describe('workspace atoms', () => {
-  it('derives WorkspaceContext from active symbol and view', () => {
+describe('enterprise workspace atoms', () => {
+  it('opens on projects with the Agent panel visible', () => {
     const store = createStore();
-    store.set(activeSymbolAtom, 'NVDA.US');
-    store.set(activeViewAtom, 'chart');
-
-    expect(store.get(workspaceContextAtom)).toEqual({
-      activeSymbol: 'NVDA.US',
-      activeView: 'chart',
-    });
-  });
-
-  it('omits unset fields from the context', () => {
-    const store = createStore();
-    expect(store.get(workspaceContextAtom)).toEqual({
-      activeView: 'overview',
-    });
-
-    store.set(selectedPositionAtom, 'pos-1');
-    expect(store.get(workspaceContextAtom)).toEqual({
-      activeView: 'overview',
-      selectedPosition: 'pos-1',
-    });
-  });
-
-  it('includes comparisonSymbols from the compare workspace when set', () => {
-    const store = createStore();
-    expect(store.get(workspaceContextAtom)).toEqual({ activeView: 'overview' });
-
-    store.set(compareSymbolsAtom, ['AAPL.US', 'MSFT.US']);
-    expect(store.get(workspaceContextAtom)).toEqual({
-      activeView: 'overview',
-      comparisonSymbols: ['AAPL.US', 'MSFT.US'],
-    });
-  });
-
-  it('nav and panel visibility atoms have defaults', () => {
-    const store = createStore();
-    expect(store.get(navSectionAtom)).toBe('sessions');
+    expect(store.get(navSectionAtom)).toBe('projects');
     expect(store.get(agentPanelVisibleAtom)).toBe(true);
+  });
+
+  it('limits navigation to projects and settings', () => {
+    const store = createStore();
+    store.set(navSectionAtom, 'settings');
+    store.set(settingsTabAtom, 'llm');
+    expect(store.get(navSectionAtom)).toBe('settings');
+    expect(store.get(settingsTabAtom)).toBe('llm');
+    store.set(navSectionAtom, 'projects');
+    expect(store.get(navSectionAtom)).toBe('projects');
+  });
+
+  it('allows the right Agent panel to be collapsed', () => {
+    const store = createStore();
     store.set(agentPanelVisibleAtom, false);
     expect(store.get(agentPanelVisibleAtom)).toBe(false);
   });

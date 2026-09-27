@@ -5,6 +5,8 @@ import {
   type BusinessResearchEvidence,
   type BusinessResearchIdKind,
   type BusinessResearchObservation,
+  type BusinessResearchProject,
+  type BusinessResearchProjectId,
   type BusinessResearchReportId,
   type BusinessResearchRunId,
   isBusinessResearchRunMode,
@@ -67,7 +69,7 @@ export class BusinessResearchService {
 
   async start(
     value: unknown,
-    options: { runId?: BusinessResearchRunId; mode?: BusinessResearchRunMode } = {},
+    options: { runId?: BusinessResearchRunId; projectId?: BusinessResearchProjectId; parentRunId?: BusinessResearchRunId; mode?: BusinessResearchRunMode } = {},
   ): Promise<BusinessResearchRunRecord> {
     await this.ensureRecovered();
     const normalized = normalizeBusinessResearchInput(value);
@@ -77,6 +79,18 @@ export class BusinessResearchService {
     const mode = options.mode ?? 'live';
     if (!isBusinessResearchRunMode(mode)) {
       throw createCodeError('BUSINESS_RESEARCH_INVALID_MODE', 'Business research mode must be live or fixture.');
+    }
+    const project = options.projectId === undefined
+      ? await this.findOrCreateProject(normalized.value)
+      : await this.repository.getProject(options.projectId);
+    if (project === undefined || !sameProjectScope(project, normalized.value)) {
+      throw createCodeError('BUSINESS_RESEARCH_INVALID_PROJECT', 'The research task does not match the selected project.');
+    }
+    if (options.parentRunId !== undefined) {
+      const parent = await this.repository.getRun(options.parentRunId);
+      if (parent === undefined || parent.projectId !== project.id) {
+        throw createCodeError('BUSINESS_RESEARCH_INVALID_PARENT_RUN', 'A follow-up run must reference an earlier run in the same project.');
+      }
     }
     const runId = options.runId ?? this.createId('run');
     const active = this.activeRuns.get(runId);
@@ -90,6 +104,8 @@ export class BusinessResearchService {
     const timestamp = this.now();
     const record: BusinessResearchRunRecord = {
       id: runId,
+      projectId: project.id,
+      ...(options.parentRunId === undefined ? {} : { parentRunId: options.parentRunId }),
       task: normalized.value,
       mode,
       state: { status: 'queued', updatedAt: isoTime(timestamp) },
@@ -153,7 +169,7 @@ export class BusinessResearchService {
 
   async subscribe(
     value: unknown,
-    options: { intervalMs?: number } = {},
+    options: { intervalMs?: number; projectId?: BusinessResearchProjectId } = {},
   ): Promise<BusinessResearchSubscriptionRecord> {
     const normalized = normalizeBusinessResearchInput(value);
     if (!normalized.ok) {
@@ -163,9 +179,16 @@ export class BusinessResearchService {
     if (!Number.isSafeInteger(intervalMs) || intervalMs < MIN_SUBSCRIPTION_INTERVAL_MS) {
       throw createCodeError('BUSINESS_RESEARCH_INVALID_INTERVAL', 'Monitoring interval must be at least one hour.');
     }
+    const project = options.projectId === undefined
+      ? await this.findOrCreateProject(normalized.value)
+      : await this.repository.getProject(options.projectId);
+    if (project === undefined || !sameProjectScope(project, normalized.value)) {
+      throw createCodeError('BUSINESS_RESEARCH_INVALID_PROJECT', 'The subscription task does not match the selected project.');
+    }
     const now = this.now();
     const record: BusinessResearchSubscriptionRecord = {
       id: this.createId('subscription') as BusinessResearchSubscriptionId,
+      projectId: project.id,
       task: normalized.value,
       intervalMs,
       enabled: true,
@@ -209,6 +232,52 @@ export class BusinessResearchService {
 
   async listSubscriptions(): Promise<BusinessResearchSubscriptionRecord[]> {
     return (await this.repository.listSubscriptions()).filter((subscription) => subscription.removedAt === undefined);
+  }
+
+  async createProject(input: unknown): Promise<BusinessResearchProject> {
+    if (!isRecord(input)) throw createCodeError('BUSINESS_RESEARCH_INVALID_PROJECT', 'Invalid business research project.');
+    const title = typeof input.title === 'string' ? input.title.trim() : '';
+    const normalized = normalizeBusinessResearchInput({
+      industry: input.industry,
+      question: 'Project scope',
+      competitors: input.competitors,
+      strategyId: 'industry_overview',
+    });
+    if (title.length === 0 || title.length > 160 || !normalized.ok) {
+      throw createCodeError('BUSINESS_RESEARCH_INVALID_PROJECT', 'Invalid business research project.');
+    }
+    const now = this.now();
+    const project: BusinessResearchProject = {
+      id: this.createId('project') as BusinessResearchProjectId,
+      title,
+      industry: normalized.value.industry,
+      competitors: normalized.value.competitors,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await this.repository.saveProject(project);
+    return structuredClone(project);
+  }
+
+  async listProjects(): Promise<BusinessResearchProject[]> {
+    return this.repository.listProjects();
+  }
+
+  private async findOrCreateProject(task: BusinessResearchTaskInput): Promise<BusinessResearchProject> {
+    const projects = await this.repository.listProjects();
+    const existing = projects.find((project) => sameProjectScope(project, task));
+    if (existing !== undefined) return existing;
+    const now = this.now();
+    const project: BusinessResearchProject = {
+      id: this.createId('project') as BusinessResearchProjectId,
+      title: `${task.industry} · ${task.competitors.slice(0, 2).join(', ')}`.slice(0, 160),
+      industry: task.industry,
+      competitors: [...task.competitors],
+      createdAt: now,
+      updatedAt: now,
+    };
+    await this.repository.saveProject(project);
+    return project;
   }
 
   private async execute(record: BusinessResearchRunRecord, signal: AbortSignal): Promise<void> {
@@ -396,6 +465,8 @@ export class BusinessResearchService {
       const finalTimestamp = allEvents[allEvents.length - 1]?.timestamp ?? this.now();
       const recovered: BusinessResearchRunRecord = {
         id: runId,
+        ...(record?.projectId === undefined ? {} : { projectId: record.projectId }),
+        ...(record?.parentRunId === undefined ? {} : { parentRunId: record.parentRunId }),
         task,
         mode,
         state: stateFromOutcome(outcome, finalTimestamp),
@@ -405,6 +476,7 @@ export class BusinessResearchService {
       };
       await this.repository.saveRun(recovered);
     }
+    await this.repository.listProjects();
   }
 
   private createId<Kind extends BusinessResearchIdKind>(kind: Kind): NonNullable<ReturnType<typeof parseBusinessResearchId<Kind>>> {
@@ -447,6 +519,19 @@ function outcomeFromState(state: BusinessResearchRunState): BusinessResearchTerm
 
 function isTerminalState(state: BusinessResearchRunState): boolean {
   return state.status === 'completed' || state.status === 'partial' || state.status === 'failed' || state.status === 'cancelled';
+}
+
+function sameProjectScope(project: BusinessResearchProject, task: BusinessResearchTaskInput): boolean {
+  return normalizeName(project.industry) === normalizeName(task.industry) &&
+    project.competitors.map(normalizeName).sort().join('\u0000') === task.competitors.map(normalizeName).sort().join('\u0000');
+}
+
+function normalizeName(value: string): string {
+  return value.trim().toLocaleLowerCase('en-US');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function isoTime(timestamp: number): string {

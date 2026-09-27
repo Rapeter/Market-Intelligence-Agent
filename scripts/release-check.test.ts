@@ -31,12 +31,23 @@ describe('release checks', () => {
       args: ['run', 'test:unit'],
       cwd: repositoryRoot,
     });
+    expect(invocations).toContainEqual({
+      command: 'bun',
+      args: ['run', 'test:installer-smoke'],
+      cwd: resolve(repositoryRoot, 'apps', 'electron'),
+    });
   });
 
-  it('uses the same isolated unit-test script in the macOS release workflow', () => {
+  it('uses the same isolated unit-test script in the Windows release workflow', () => {
     const workflow = readFileSync(resolve(repositoryRoot, '.github/workflows/release.yml'), 'utf8');
-    const unitStep = workflow.match(/- name: Unit\/integration tests\r?\n\s+run: ([^\r\n]+)/);
+    const unitStep = workflow.match(/- name: Unit and integration tests\r?\n\s+run: ([^\r\n]+)/);
 
     expect(unitStep?.[1]).toBe('bun run test:unit');
+    expect(workflow).toContain('runs-on: windows-latest');
+    expect(workflow).toContain('bun run test:e2e');
+    expect(workflow).toContain('bun run test:package-smoke');
+    expect(workflow).toMatch(/- name: Clean NSIS installer install\/uninstall smoke\r?\n\s+run: bun run test:installer-smoke/);
+    expect(workflow).not.toContain('macos-latest');
+    expect(workflow).not.toContain('.dmg');
   });
 });

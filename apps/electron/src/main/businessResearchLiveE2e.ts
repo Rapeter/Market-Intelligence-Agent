@@ -5,7 +5,11 @@ import type {
   BusinessResearchRunId,
   BusinessResearchTaskInput,
 } from '@finagent/core';
-import type { BusinessResearchToolPort, DecisionModelPort } from '@finagent/shared/business-research';
+import type {
+  BusinessResearchRunRecord,
+  BusinessResearchToolPort,
+  DecisionModelPort,
+} from '@finagent/shared/business-research';
 
 const ALLOWED_PROBE_ACTIONS: readonly BusinessResearchAction['kind'][] = ['search_web', 'finish'];
 const MAX_RESULTS_TO_OPEN_PER_COMPETITOR = 3;
@@ -40,6 +44,18 @@ export interface RunBusinessResearchLiveCounterfactualsOptions {
   sanitizeText: (value: string) => string;
   signal: AbortSignal;
   now?: () => number;
+}
+
+export function summarizeLiveMonitorFollowUpRun(run: BusinessResearchRunRecord | undefined) {
+  if (run === undefined) return null;
+  return {
+    id: run.id,
+    projectId: run.projectId ?? null,
+    mode: run.mode,
+    status: run.state.status,
+    reportId: run.reportId ?? null,
+    failureCode: run.state.status === 'failed' ? run.state.code : null,
+  };
 }
 
 /** Calls the real decision model with a fixed task and only the evidence changed per pair. */

@@ -31,7 +31,7 @@ export function buildI18nOptions(opts: I18nOptions): InitOptions {
     defaultNS: 'common',
     ns: [...SUPPORTED_NAMESPACES],
     interpolation: { escapeValue: false },
-    // Dotted keys (`portfolio.totalAssets`) per spec §9 — dot is the namespace
+    // Dotted keys (`research.projects.title`) — dot is the namespace
     // separator, not i18next's v21+ default `:`. Guards against later refactors
     // silently switching to a different separator convention.
     nsSeparator: '.',

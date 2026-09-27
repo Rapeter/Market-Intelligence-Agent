@@ -18,32 +18,15 @@ export const resources: I18nResources = {
   'zh-CN': zhCnResources,
 };
 
-/** Full domain list (spec §8); feature slices may register a subset at first. */
+/** Namespaces shipped by the enterprise research workbench. */
 export const SUPPORTED_NAMESPACES: readonly string[] = [
   'common',
   'navigation',
-  'today',
-  'discover',
-  'security',
   'research',
-  'thesis',
-  'portfolio',
-  'compare',
-  'alerts',
-  'automation',
   'agent',
-  'trace',
-  'skills',
-  'performance',
   'settings',
-  'connections',
-  'onboarding',
-  'evaluation',
   'diagnostics',
   'errors',
-  'events',
-  'profile',
-  'demo',
 ];
 
 export const SUPPORTED_LOCALES_FOR_RESOURCES: readonly SupportedLocale[] = ['en-US', 'zh-CN'];

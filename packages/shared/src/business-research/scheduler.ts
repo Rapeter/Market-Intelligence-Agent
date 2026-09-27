@@ -159,6 +159,7 @@ export class BusinessResearchScheduler {
             try {
               await this.service.start(subscription.task, {
                 runId: reservedRunId,
+                projectId: subscription.projectId,
                 mode: this.options.runMode ?? 'live',
               });
             } catch {

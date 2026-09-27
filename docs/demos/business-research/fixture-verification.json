@@ -1,15 +1,15 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "verificationMode": "deterministic-fixture-only",
   "verificationPlatform": "win32",
-  "generatedAt": "2026-09-24T08:47:03.000Z",
+  "generatedAt": "2026-09-27T05:50:57.082Z",
   "evaluationMetrics": {
     "metadata": {
       "mode": "fixture",
       "corpusVersion": 1,
       "modelVersion": "scripted-fixture-v1",
       "sourceVersion": "fixed-public-snapshot-v1",
-      "evaluatedAt": "2026-09-24T08:46:59.146Z"
+      "evaluatedAt": "2026-09-27T05:50:53.296Z"
     },
     "cases": {
       "total": 24,
@@ -246,19 +246,23 @@
     }
   },
   "electronUi": {
-    "fixtureRunCount": 2,
+    "projectCreated": true,
+    "projectScopedRuns": 2,
+    "followUpLinkedToParent": true,
     "fixtureEvaluation": {
       "passed": 24,
       "total": 24
     },
-    "firstRunElapsedMs": 1486,
-    "secondRunElapsedMs": 1490,
-    "evidenceRecordsPerRun": 2,
-    "citationGrade": "fixture_data",
+    "firstRunElapsedMs": 1501,
+    "followUpRunElapsedMs": 1495,
+    "evidenceRecordsPerRun": [
+      2,
+      2
+    ],
     "reloadPersistence": true,
-    "rerunDiffNewEvidence": 2,
-    "subscriptionCreated": true,
-    "pausePersistedAfterReload": true
+    "subscriptionCreatedForProject": true,
+    "pausedSubscriptionAndProjectPersistedAfterReload": true,
+    "financeProductCopyAbsentFromWorkspaceAndSettings": true
   },
   "monitorIntegration": {
     "schemaVersion": 1,
@@ -269,13 +273,15 @@
     ],
     "snapshotSource": "apps/electron/e2e/fixtures/business-research",
     "networkRequests": 0,
+    "projectId": "project-monitor-fixture-1",
     "probeCalls": 3,
     "researchRunsPersisted": 2,
+    "triggeredRunsRetainProject": true,
     "checksPersisted": 3,
     "duplicateSuppressed": true,
     "elapsedMs": [
-      53,
-      40,
+      51,
+      37,
       4
     ],
     "checks": [
@@ -286,7 +292,7 @@
         "reason": "new_source",
         "runMode": "fixture",
         "runId": "run-monitor-check-1",
-        "elapsedMs": 53
+        "elapsedMs": 51
       },
       {
         "snapshotId": "northstar-update-v2",
@@ -295,7 +301,7 @@
         "reason": "source_updated",
         "runMode": "fixture",
         "runId": "run-monitor-check-2",
-        "elapsedMs": 40
+        "elapsedMs": 37
       },
       {
         "snapshotId": "northstar-update-v1",

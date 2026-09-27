@@ -1,9 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, ArrowUpRight, Check, Clock3, Pause, Play, RefreshCw, Search, ShieldCheck, Sparkles, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowUpRight, Check, Clock3, Pause, Play, RefreshCw, ShieldCheck, Sparkles, Trash2 } from 'lucide-react';
 import {
-  BUSINESS_RESEARCH_STRATEGY_KEYS,
   normalizeBusinessResearchInput,
   type ApiResult,
   type BusinessResearchAction,
@@ -24,19 +23,20 @@ import {
   businessResearchFormAtom,
   businessResearchMetricsAtom,
   businessResearchModeAtom,
+  businessResearchProjectsAtom,
   businessResearchReportsAtom,
   businessResearchRunsAtom,
   businessResearchSubscriptionsAtom,
   selectedBusinessResearchReportAtom,
   selectedBusinessResearchReportIdAtom,
-  selectedBusinessResearchRunAtom,
+  selectedBusinessResearchProjectAtom,
+  selectedBusinessResearchProjectIdAtom,
   selectedBusinessResearchRunIdAtom,
   selectedBusinessResearchSubscriptionAtom,
   selectedBusinessResearchSubscriptionIdAtom,
 } from '../../atoms/businessResearchAtoms';
 import { useFinagentClient } from '../../client';
 
-const STRATEGIES: readonly BusinessResearchStrategyId[] = BUSINESS_RESEARCH_STRATEGY_KEYS;
 const ACTIVE_STATES = new Set(['queued', 'planning', 'gathering', 'synthesizing']);
 const CHECK_INTERVALS = [
   { value: 60 * 60 * 1_000, label: '1 h' },
@@ -48,10 +48,13 @@ export const BusinessResearchWorkspace: React.FC = () => {
   const { t } = useTranslation();
   const client = useFinagentClient();
   const api = client.businessResearch;
+  const projects = useAtomValue(businessResearchProjectsAtom);
+  const setProjects = useSetAtom(businessResearchProjectsAtom);
+  const project = useAtomValue(selectedBusinessResearchProjectAtom);
+  const selectedProjectId = useAtomValue(selectedBusinessResearchProjectIdAtom);
+  const setSelectedProjectId = useSetAtom(selectedBusinessResearchProjectIdAtom);
   const form = useAtomValue(businessResearchFormAtom);
-  const setForm = useSetAtom(businessResearchFormAtom);
   const mode = useAtomValue(businessResearchModeAtom);
-  const setMode = useSetAtom(businessResearchModeAtom);
   const runs = useAtomValue(businessResearchRunsAtom);
   const setRuns = useSetAtom(businessResearchRunsAtom);
   const reports = useAtomValue(businessResearchReportsAtom);
@@ -64,17 +67,26 @@ export const BusinessResearchWorkspace: React.FC = () => {
   const setChecksBySubscription = useSetAtom(businessResearchChecksAtom);
   const metrics = useAtomValue(businessResearchMetricsAtom);
   const setMetrics = useSetAtom(businessResearchMetricsAtom);
-  const selectedRun = useAtomValue(selectedBusinessResearchRunAtom);
   const selectedRunId = useAtomValue(selectedBusinessResearchRunIdAtom);
   const selectedRunIdRef = useRef(selectedRunId);
-  const selectedReport = useAtomValue(selectedBusinessResearchReportAtom);
-  const selectedSubscription = useAtomValue(selectedBusinessResearchSubscriptionAtom);
+  const selectedProjectIdRef = useRef(selectedProjectId);
+  const selectedReportRecord = useAtomValue(selectedBusinessResearchReportAtom);
+  const selectedSubscriptionRecord = useAtomValue(selectedBusinessResearchSubscriptionAtom);
+  const projectRuns = useMemo(() => runs.filter((run) => run.projectId === project?.id), [project?.id, runs]);
+  const projectRunIds = useMemo(() => new Set(projectRuns.map((run) => run.id)), [projectRuns]);
+  const projectReports = useMemo(() => reports.filter((report) => projectRunIds.has(report.runId)), [projectRunIds, reports]);
+  const projectSubscriptions = useMemo(() => subscriptions.filter((subscription) => subscription.projectId === project?.id), [project?.id, subscriptions]);
+  const selectedRun = projectRuns.find((run) => run.id === selectedRunId) ?? projectRuns[0];
+  const selectedReport = selectedReportRecord && projectReports.some((report) => report.id === selectedReportRecord.id)
+    ? selectedReportRecord : undefined;
+  const selectedSubscription = selectedSubscriptionRecord && projectSubscriptions.some((item) => item.id === selectedSubscriptionRecord.id)
+    ? selectedSubscriptionRecord : undefined;
   const setSelectedRunId = useSetAtom(selectedBusinessResearchRunIdAtom);
   const setSelectedReportId = useSetAtom(selectedBusinessResearchReportIdAtom);
   const setSelectedSubscriptionId = useSetAtom(selectedBusinessResearchSubscriptionIdAtom);
 
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<'start' | 'subscribe' | 'evaluation' | 'credential' | null>(null);
+  const [busy, setBusy] = useState<'subscribe' | 'evaluation' | 'credential' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [credentialConfigured, setCredentialConfigured] = useState(false);
@@ -83,13 +95,21 @@ export const BusinessResearchWorkspace: React.FC = () => {
   const [intervalMs, setIntervalMs] = useState<number>(24 * 60 * 60 * 1_000);
 
   useEffect(() => { selectedRunIdRef.current = selectedRunId; }, [selectedRunId]);
+  useEffect(() => { selectedProjectIdRef.current = selectedProjectId; }, [selectedProjectId]);
 
-  const normalizedInput = useMemo(() => normalizeBusinessResearchInput({
-    industry: form.industry,
-    question: form.question,
-    competitors: parseCompetitors(form.competitorsText),
-    strategyId: form.strategyId,
-  }), [form]);
+  useEffect(() => {
+    if (selectedRunId && projectRuns.some((run) => run.id === selectedRunId)) return;
+    const nextRun = projectRuns[0];
+    setSelectedRunId(nextRun?.id ?? null);
+    setSelectedReportId(nextRun?.reportId ?? null);
+  }, [projectRuns, selectedRunId, setSelectedReportId, setSelectedRunId]);
+
+  const normalizedInput = useMemo(() => project ? normalizeBusinessResearchInput({
+    industry: project.industry,
+    question: selectedRun?.task.question ?? `Track public changes in ${project.title}.`,
+    competitors: project.competitors,
+    strategyId: selectedRun?.task.strategyId ?? form.strategyId,
+  }) : undefined, [form.strategyId, project, selectedRun?.task.question, selectedRun?.task.strategyId]);
 
   const loadSubscriptionChecks = useCallback(async (items: readonly BusinessResearchSubscriptionRecord[]) => {
     const loaded: Record<string, BusinessResearchCheckRecord[]> = {};
@@ -107,6 +127,13 @@ export const BusinessResearchWorkspace: React.FC = () => {
 
   const refreshRecords = useCallback(async () => {
     if (!api) throw new Error(t('research.businessResearch.errors.unavailable'));
+    const nextProjects = unwrap(await api.listProjects());
+    const currentProjectId = selectedProjectIdRef.current;
+    const nextProjectId = currentProjectId && nextProjects.some((item) => item.id === currentProjectId)
+      ? currentProjectId
+      : nextProjects[0]?.id ?? null;
+    setProjects(nextProjects);
+    if (nextProjectId !== currentProjectId) setSelectedProjectId(nextProjectId);
     const [runResult, reportResult, subscriptionResult, credentialResult] = await Promise.all([
       api.listRuns(), api.listReports(), api.listSubscriptions(), api.getCredentialStatus(),
     ]);
@@ -121,19 +148,22 @@ export const BusinessResearchWorkspace: React.FC = () => {
     setChecksBySubscription((current) => mergeSubscriptionChecks(current, nextSubscriptions, nextChecks));
     setCredentialConfigured(credential.configured);
     setCredentialUpdatedAt(credential.updatedAt);
+    const scopedRuns = nextRuns.filter((item) => item.projectId === nextProjectId);
+    const scopedSubscriptions = nextSubscriptions.filter((item) => item.projectId === nextProjectId);
     const currentSelectedRunId = selectedRunIdRef.current;
-    const nextSelectedRunId = currentSelectedRunId && nextRuns.some((item) => item.id === currentSelectedRunId)
+    const nextSelectedRunId = currentSelectedRunId && scopedRuns.some((item) => item.id === currentSelectedRunId)
       ? currentSelectedRunId
-      : nextRuns[0]?.id ?? null;
-    const nextSelectedRun = nextRuns.find((item) => item.id === nextSelectedRunId);
+      : scopedRuns[0]?.id ?? null;
+    const nextSelectedRun = scopedRuns.find((item) => item.id === nextSelectedRunId);
+    const scopedReports = nextReports.filter((item) => scopedRuns.some((run) => run.id === item.runId));
     setSelectedRunId(nextSelectedRunId);
-    setSelectedReportId(nextSelectedRun?.reportId && nextReports.some((item) => item.id === nextSelectedRun.reportId)
+    setSelectedReportId(nextSelectedRun?.reportId && scopedReports.some((item) => item.id === nextSelectedRun.reportId)
       ? nextSelectedRun.reportId
       : null);
-    setSelectedSubscriptionId((current) => current && nextSubscriptions.some((item) => item.id === current)
+    setSelectedSubscriptionId((current) => current && scopedSubscriptions.some((item) => item.id === current)
       ? current
-      : nextSubscriptions[0]?.id ?? null);
-  }, [api, loadSubscriptionChecks, setChecksBySubscription, setReports, setRuns, setSelectedReportId, setSelectedRunId, setSelectedSubscriptionId, setSubscriptions, setCredentialConfigured, setCredentialUpdatedAt, t]);
+      : scopedSubscriptions[0]?.id ?? null);
+  }, [api, loadSubscriptionChecks, setChecksBySubscription, setProjects, setReports, setRuns, setSelectedProjectId, setSelectedReportId, setSelectedRunId, setSelectedSubscriptionId, setSubscriptions, setCredentialConfigured, setCredentialUpdatedAt, t]);
 
   const refreshEvaluation = useCallback(async () => {
     if (!api) throw new Error(t('research.businessResearch.errors.unavailable'));
@@ -159,16 +189,16 @@ export const BusinessResearchWorkspace: React.FC = () => {
   }, [refreshEvaluation, refreshRecords, t]);
 
   useEffect(() => {
-    if (!api || subscriptions.length === 0) return;
+    if (!api || projectSubscriptions.length === 0) return;
     let active = true;
     let inFlight = false;
     const refreshChecks = async () => {
       if (inFlight) return;
       inFlight = true;
       try {
-        const nextChecks = await loadSubscriptionChecks(subscriptions);
+        const nextChecks = await loadSubscriptionChecks(projectSubscriptions);
         if (active) {
-          setChecksBySubscription((current) => mergeSubscriptionChecks(current, subscriptions, nextChecks));
+          setChecksBySubscription((current) => mergeSubscriptionChecks(current, projectSubscriptions, nextChecks));
         }
       } finally {
         inFlight = false;
@@ -179,7 +209,7 @@ export const BusinessResearchWorkspace: React.FC = () => {
       active = false;
       clearInterval(timer);
     };
-  }, [api, loadSubscriptionChecks, setChecksBySubscription, subscriptions]);
+  }, [api, loadSubscriptionChecks, projectSubscriptions, setChecksBySubscription]);
 
   useEffect(() => {
     if (!api || selectedRun === undefined) {
@@ -221,8 +251,6 @@ export const BusinessResearchWorkspace: React.FC = () => {
     };
   }, [api, selectedRun?.id, setEvents, setReports, setRuns, setSelectedReportId, t]);
 
-  const updateForm = (patch: Partial<typeof form>) => setForm((current) => ({ ...current, ...patch }));
-
   const handleRefresh = async () => {
     setError(null);
     try {
@@ -230,27 +258,6 @@ export const BusinessResearchWorkspace: React.FC = () => {
       await refreshEvaluation();
     } catch (caught) {
       setError(errorMessage(caught, t('research.businessResearch.errors.load')));
-    }
-  };
-
-  const handleStart = async () => {
-    if (!api) { setError(t('research.businessResearch.errors.unavailable')); return; }
-    if (!normalizedInput.ok) { setError(t('research.businessResearch.form.invalid')); return; }
-    setBusy('start');
-    setError(null);
-    setNotice(null);
-    try {
-      const run = unwrap(await api.start(normalizedInput.value, mode));
-      setSelectedRunId(run.id);
-      setSelectedReportId(run.reportId ?? null);
-      setRuns((current) => [run, ...current.filter((item) => item.id !== run.id)]);
-      await refreshRecords();
-      setSelectedRunId(run.id);
-      setSelectedReportId(run.reportId ?? null);
-    } catch (caught) {
-      setError(errorMessage(caught, t('research.businessResearch.errors.start')));
-    } finally {
-      setBusy(null);
     }
   };
 
@@ -268,11 +275,11 @@ export const BusinessResearchWorkspace: React.FC = () => {
 
   const handleSubscribe = async () => {
     if (!api) { setError(t('research.businessResearch.errors.unavailable')); return; }
-    if (!normalizedInput.ok) { setError(t('research.businessResearch.form.invalid')); return; }
+    if (!normalizedInput?.ok || !project) { setError(t('research.businessResearch.form.invalid')); return; }
     setBusy('subscribe');
     setError(null);
     try {
-      const subscription = unwrap(await api.subscribe(normalizedInput.value, intervalMs));
+      const subscription = unwrap(await api.subscribe(normalizedInput.value, intervalMs, project.id));
       setSelectedSubscriptionId(subscription.id);
       await refreshRecords();
       setNotice(t('research.businessResearch.monitor.title'));
@@ -348,8 +355,8 @@ export const BusinessResearchWorkspace: React.FC = () => {
   };
 
   const previousReport = useMemo(
-    () => selectedReport ? findPreviousReport(selectedReport, reports, runs) : undefined,
-    [reports, runs, selectedReport],
+    () => selectedReport ? findPreviousReport(selectedReport, projectReports, projectRuns) : undefined,
+    [projectReports, projectRuns, selectedReport],
   );
   const reportDiff = useMemo(
     () => selectedReport ? diffReports(selectedReport, previousReport) : undefined,
@@ -359,6 +366,9 @@ export const BusinessResearchWorkspace: React.FC = () => {
   if (!api) {
     return <WorkspaceMessage>{t('research.businessResearch.errors.unavailable')}</WorkspaceMessage>;
   }
+  if (!project) {
+    return <WorkspaceMessage>{t('research.projects.noProject')}</WorkspaceMessage>;
+  }
 
   return (
     <div className="h-full overflow-y-auto bg-[#f4f6f8]" data-testid="business-research-workspace">
@@ -367,10 +377,10 @@ export const BusinessResearchWorkspace: React.FC = () => {
           <div className="min-w-0">
             <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.19em] text-sky-700">
               <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-              {t('research.businessResearch.title')}
+              {project.title}
             </div>
             <h1 className="text-[24px] font-semibold tracking-[-0.035em] text-slate-900 sm:text-[28px]">
-              {t('research.businessResearch.subtitle')}
+              {project.industry} · {project.competitors.join(', ')}
             </h1>
           </div>
           <button type="button" onClick={() => void handleRefresh()} aria-label={t('research.businessResearch.history.reload')}
@@ -393,39 +403,17 @@ export const BusinessResearchWorkspace: React.FC = () => {
 
         <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(270px,340px)_minmax(0,1fr)]">
           <section className="flex min-w-0 flex-col gap-4">
-            <Panel title={t('research.businessResearch.form.title')} eyebrow="01 / SCOPE">
-              <div className="space-y-3.5">
-                <Field label={t('research.businessResearch.form.industry')}>
-                  <input name="industry" value={form.industry} onChange={(event) => updateForm({ industry: event.currentTarget.value })}
-                    placeholder={t('research.businessResearch.form.industryPlaceholder')} className={inputClass} />
-                </Field>
-                <Field label={t('research.businessResearch.form.question')}>
-                  <textarea name="question" rows={3} value={form.question} onChange={(event) => updateForm({ question: event.currentTarget.value })}
-                    placeholder={t('research.businessResearch.form.questionPlaceholder')} className={`${inputClass} resize-y`} />
-                </Field>
-                <Field label={t('research.businessResearch.form.competitors')} hint={t('research.businessResearch.form.competitorsHint')}>
-                  <textarea name="competitors" rows={3} value={form.competitorsText} onChange={(event) => updateForm({ competitorsText: event.currentTarget.value })}
-                    placeholder={t('research.businessResearch.form.competitorsPlaceholder')} className={`${inputClass} resize-y`} />
-                </Field>
-                <Field label={t('research.businessResearch.form.strategy')}>
-                  <select value={form.strategyId} onChange={(event) => updateForm({ strategyId: event.currentTarget.value as BusinessResearchStrategyId })}
-                    className={inputClass}>
-                    {STRATEGIES.map((strategy) => <option key={strategy} value={strategy}>{t(`research.businessResearch.strategy.${strategy}`)}</option>)}
-                  </select>
-                </Field>
-                <fieldset>
-                  <legend className="mb-2 text-[11px] font-semibold text-slate-700">{t('research.businessResearch.form.mode')}</legend>
-                  <div className="grid grid-cols-2 gap-2" role="group" aria-label={t('research.businessResearch.form.mode')}>
-                    <ModeButton active={mode === 'fixture'} onClick={() => setMode('fixture')} testId="business-research-mode-fixture">
-                      {t('research.businessResearch.mode.fixture')}
-                    </ModeButton>
-                    <ModeButton active={mode === 'live'} onClick={() => setMode('live')} testId="business-research-mode-live">
-                      {t('research.businessResearch.mode.live')}
-                    </ModeButton>
-                  </div>
-                  <p className="mt-2 text-[11px] leading-4 text-slate-500">{t(`research.businessResearch.mode.${mode}Hint`)}</p>
-                </fieldset>
-
+            <Panel title={t('research.projects.title')} eyebrow="01 / PROJECT SCOPE">
+              <div className="space-y-3">
+                <div>
+                  <div className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400">{t('research.projects.industry')}</div>
+                  <p className="text-[12px] font-medium text-slate-800">{project.industry}</p>
+                </div>
+                <div>
+                  <div className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400">{t('research.projects.competitors')}</div>
+                  <p className="text-[11px] leading-5 text-slate-600">{project.competitors.join(' · ')}</p>
+                </div>
+                <p className="text-[10px] leading-4 text-slate-500">{t(`research.businessResearch.mode.${mode}Hint`)}</p>
                 {mode === 'live' && (
                   <div className="rounded-md border border-slate-200 bg-slate-50 p-3" data-testid="business-research-credential">
                     <div className="mb-1 text-[11px] font-semibold text-slate-800">{t('research.businessResearch.credential.title')}</div>
@@ -445,25 +433,15 @@ export const BusinessResearchWorkspace: React.FC = () => {
                     </div>
                   </div>
                 )}
-
-                <div className="flex flex-col gap-2 pt-1 sm:flex-row">
-                  <button type="button" data-testid="business-research-start" disabled={busy === 'start'} onClick={() => void handleStart()}
-                    className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md bg-slate-900 px-3 text-xs font-semibold text-white transition hover:bg-slate-700 disabled:cursor-wait disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2">
-                    <Search className="h-3.5 w-3.5" aria-hidden="true" />
-                    {busy === 'start' ? t('research.businessResearch.form.starting') : t('research.businessResearch.form.start')}
-                  </button>
-                  <button type="button" data-testid="business-research-subscribe-form" disabled={busy === 'subscribe'} onClick={() => void handleSubscribe()}
-                    className={`${secondaryButtonClass} h-10 flex-1`}>{busy === 'subscribe' ? t('research.businessResearch.form.subscribing') : t('research.businessResearch.form.subscribe')}</button>
-                </div>
               </div>
             </Panel>
 
             <Panel title={t('research.businessResearch.history.title')} eyebrow="02 / ARCHIVE" action={
-              loading ? <span className="text-[10px] text-slate-400">{t('common.loading')}</span> : <span className="text-[10px] tabular-nums text-slate-400">{runs.length}</span>
+              loading ? <span className="text-[10px] text-slate-400">{t('common.loading')}</span> : <span className="text-[10px] tabular-nums text-slate-400">{projectRuns.length}</span>
             }>
-              {runs.length === 0 ? <EmptyText>{t('research.businessResearch.history.empty')}</EmptyText> : (
+              {projectRuns.length === 0 ? <EmptyText>{t('research.businessResearch.history.empty')}</EmptyText> : (
                 <div className="max-h-[270px] space-y-1 overflow-y-auto pr-1">
-                  {runs.map((run) => {
+                  {projectRuns.map((run) => {
                     const active = selectedRun?.id === run.id;
                     return <button key={run.id} type="button" onClick={() => selectRun(run.id)} aria-pressed={active}
                       className={`w-full rounded-md border p-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${active ? 'border-sky-300 bg-sky-50/70' : 'border-transparent hover:border-slate-200 hover:bg-slate-50'}`}>
@@ -495,9 +473,9 @@ export const BusinessResearchWorkspace: React.FC = () => {
             </Panel>
 
             <Panel title={t('research.businessResearch.report.title')} eyebrow="04 / FINDINGS" action={
-              reports.length > 0 ? <select aria-label={t('research.businessResearch.report.title')} value={selectedReport?.id ?? ''}
+              projectReports.length > 0 ? <select aria-label={t('research.businessResearch.report.title')} value={selectedReport?.id ?? ''}
                 onChange={(event) => selectReport(event.currentTarget.value)} className="max-w-[190px] truncate rounded border border-slate-200 bg-white px-2 py-1 text-[10px] text-slate-600">
-                {reports.map((report) => <option key={report.id} value={report.id}>{report.title}</option>)}
+                {projectReports.map((report) => <option key={report.id} value={report.id}>{report.title}</option>)}
               </select> : null
             }>
               {selectedReport ? <ResearchReportView report={selectedReport} previous={previousReport} diff={reportDiff} t={t} />
@@ -519,9 +497,9 @@ export const BusinessResearchWorkspace: React.FC = () => {
                 <Play className="mr-1 inline h-3 w-3" aria-hidden="true" />{t('research.businessResearch.monitor.subscribe')}
               </button>
             </div>
-            {subscriptions.length === 0 ? <EmptyText>{t('research.businessResearch.monitor.empty')}</EmptyText> : (
+            {projectSubscriptions.length === 0 ? <EmptyText>{t('research.businessResearch.monitor.empty')}</EmptyText> : (
               <div className="space-y-2">
-                {subscriptions.map((subscription) => {
+                {projectSubscriptions.map((subscription) => {
                   const latestCheck = checksBySubscription[subscription.id]?.at(-1);
                   const selected = selectedSubscription?.id === subscription.id;
                   return <div key={subscription.id} data-testid={`business-research-monitor-${subscription.id}`} className={`rounded-md border p-3 ${selected ? 'border-sky-200 bg-sky-50/40' : 'border-slate-200 bg-white'}`}>

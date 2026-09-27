@@ -111,7 +111,7 @@ describe('business research Pi tools', () => {
 
   it('limits research prompts to the research tool allow-list and restores prior tools', () => {
     const handlers = new Map<string, (event?: { prompt?: string }) => unknown>();
-    let active = ['get_quote', 'read_skill_resource'];
+    let active = ['read_file', 'shell'];
     registerBusinessResearchPromptGuard({
       registerTool: () => undefined,
       on: (event, handler) => { handlers.set(event, handler); },
@@ -123,11 +123,11 @@ describe('business research Pi tools', () => {
     expect(active).toEqual(['business_research_search', 'business_research_open']);
     expect(handlers.get('tool_call')?.()).toMatchObject({ block: true });
     handlers.get('agent_end')?.();
-    expect(active).toEqual(['get_quote', 'read_skill_resource']);
+    expect(active).toEqual(['read_file', 'shell']);
 
     handlers.get('before_agent_start')?.({ prompt: 'BUSINESS_RESEARCH_SYNTHESIS_V1 use saved evidence' });
     expect(active).toEqual([]);
     handlers.get('agent_end')?.();
-    expect(active).toEqual(['get_quote', 'read_skill_resource']);
+    expect(active).toEqual(['read_file', 'shell']);
   });
 });

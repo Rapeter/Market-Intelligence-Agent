@@ -8,8 +8,8 @@
  */
 import type { AppPreferencesSnapshot, LocalePreferenceStorage } from '@finagent/core';
 import { isLocalePreference, resolveLocale, type LocalePreference } from '@finagent/i18n';
-import { createCodeError } from '@finagent/shared';
-import { JsonFileStore } from '@finagent/shared';
+import { createCodeError } from '@finagent/shared/agent/errors';
+import { JsonFileStore } from '@finagent/shared/storage/json-file-store';
 
 const FILE = 'app-preferences.json';
 

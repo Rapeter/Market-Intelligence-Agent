@@ -6,7 +6,6 @@ import {
   exportDiagnosticsBundle,
   type DiagnosticsBundle,
   type DiagnosticsErrorEntry,
-  type DiagnosticsFinancialProvider,
 } from '../../client/diagnostics';
 import { Button } from '../primitives/Button';
 
@@ -18,7 +17,7 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
 );
 
 const Row: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <div className="flex items-baseline justify-between gap-4 border-b mac-section-divider py-1.5">
+  <div className="flex items-baseline justify-between gap-4 border-b border-border py-1.5">
     <span className="text-[12px] text-foreground/52">{label}</span>
     <span className="text-right font-mono text-[12px] text-foreground">{value}</span>
   </div>
@@ -125,29 +124,15 @@ export const DiagnosticsTab: React.FC = () => {
           <Section title={t('diagnostics.sectionProviders')}>
             <Row label={t('diagnostics.llmProvider')} value={bundle.providers.llm.id ?? '—'} />
             <Row label={t('diagnostics.llmModel')} value={bundle.providers.llm.model ?? '—'} />
-            <Row label={t('diagnostics.brokerConnected')} value={bundle.providers.broker.connected ? t('diagnostics.yes') : t('diagnostics.no')} />
-            <Row label={t('diagnostics.brokerAccounts')} value={String(bundle.providers.broker.accountCount)} />
-            <Row label={t('diagnostics.longbridgeCli')} value={bundle.providers.longbridgeCliVersion ?? '—'} />
           </Section>
 
-          <Section title={t('diagnostics.sectionFinancialProviders')}>
-            {bundle.providers.financial.length === 0 ? (
-              <div className="text-[12px] text-foreground/44">{t('diagnostics.noneConnected')}</div>
-            ) : (
-              bundle.providers.financial.map((provider) => (
-                <FinancialProviderRow key={provider.id} provider={provider} t={t} />
-              ))
-            )}
-          </Section>
-
-          <Section title={t('diagnostics.sectionSkillsCapabilities')}>
-            <Row label={t('diagnostics.skillsLoaded')} value={String(bundle.skills.loaded)} />
+          <Section title={t('diagnostics.sectionResearchCapabilities')}>
             <Row label={t('diagnostics.capabilitiesAvailable')} value={String(bundle.capabilities.available.length)} />
             <div className="flex flex-wrap gap-1 pt-1">
               {bundle.capabilities.available.map((id) => (
                 <span
                   key={id}
-                  className="rounded-[6px] bg-[var(--mac-sidebar-hover)] px-2 py-0.5 font-mono text-[11px] text-foreground/72"
+                  className="rounded-[6px] bg-surface-hover px-2 py-0.5 font-mono text-[11px] text-foreground/72"
                 >
                   {id}
                 </span>
@@ -167,7 +152,6 @@ export const DiagnosticsTab: React.FC = () => {
             <Row label={t('diagnostics.piModel')} value={bundle.pi.model ?? '—'} />
             <Row label={t('diagnostics.piExtensions')} value={bundle.pi.extensions.join(', ') || '—'} />
             <Row label={t('diagnostics.piLastExit')} value={`${bundle.pi.lastExitCode ?? '—'} ${bundle.pi.lastExitSignal ?? ''}`.trim()} />
-            <Row label={t('diagnostics.piDegraded')} value={bundle.pi.observabilityDegraded == null ? '—' : bundle.pi.observabilityDegraded ? t('diagnostics.yes') : t('diagnostics.no')} />
             {bundle.pi.stderrTail && (
               <pre className="mt-1 max-h-28 overflow-auto rounded-[8px] bg-muted/40 p-2 font-mono text-[10.5px] leading-relaxed text-foreground/60">
                 {bundle.pi.stderrTail}
@@ -197,36 +181,18 @@ export const DiagnosticsTab: React.FC = () => {
   );
 };
 
-const FinancialProviderRow: React.FC<{
-  provider: DiagnosticsFinancialProvider;
-  t: (key: string) => string;
-}> = ({ provider, t }) => (
-  <div className="rounded-[10px] border mac-section-divider p-3">
-    <div className="flex items-baseline justify-between">
-      <span className="text-[13px] font-semibold text-foreground">{provider.id}</span>
-      <span className="font-mono text-[12px] text-foreground/72">{provider.status}</span>
-    </div>
-    <div className="mt-1 text-[11px] text-foreground/52">
-      {t('diagnostics.markets')}: {provider.coverage.markets.join(', ') || '—'}
-    </div>
-    <div className="text-[11px] text-foreground/52">
-      {t('diagnostics.capabilities')}: {provider.coverage.capabilities.join(', ') || '—'}
-    </div>
-  </div>
-);
-
 const ErrorRow: React.FC<{ entry: DiagnosticsErrorEntry; t: (key: string) => string }> = ({
   entry,
   t,
 }) => (
-  <li className="rounded-[10px] border mac-section-divider p-3">
+  <li className="rounded-[10px] border border-border p-3">
     <div className="flex items-baseline justify-between gap-4">
       <span className="font-mono text-[12px] text-foreground">{entry.source ?? t('diagnostics.unknown')}</span>
       <span className="font-mono text-[11px] text-foreground/44">{fmtTime(entry.at)}</span>
     </div>
     <div className="mt-1 text-[12px] text-foreground/78">{entry.message}</div>
     {entry.stack && (
-      <pre className="mt-2 max-h-32 overflow-auto rounded-[6px] bg-[var(--mac-sidebar-hover)] p-2 font-mono text-[10px] text-foreground/60">
+      <pre className="mt-2 max-h-32 overflow-auto rounded-[6px] bg-surface-hover p-2 font-mono text-[10px] text-foreground/60">
         {entry.stack}
       </pre>
     )}
@@ -236,7 +202,7 @@ const ErrorRow: React.FC<{ entry: DiagnosticsErrorEntry; t: (key: string) => str
 /** Human-readable one-line-ish summary used by the copy button. */
 function buildSummary(bundle: DiagnosticsBundle, t: (key: string, opts?: Record<string, unknown>) => string): string {
   const lines = [
-    t('diagnostics.summaryFolio', {
+    t('diagnostics.summaryApplication', {
       version: bundle.app.version,
       os: bundle.app.platform.os,
       arch: bundle.app.platform.arch,
@@ -249,17 +215,7 @@ function buildSummary(bundle: DiagnosticsBundle, t: (key: string, opts?: Record<
       provider: bundle.providers.llm.id ?? '—',
       model: bundle.providers.llm.model ?? '—',
     }),
-    t('diagnostics.summaryBroker', {
-      status: bundle.providers.broker.connected
-        ? t('diagnostics.brokerConnectedStatus')
-        : t('diagnostics.brokerDisconnectedStatus'),
-      count: bundle.providers.broker.accountCount,
-    }),
-    t('diagnostics.summaryLongbridgeCli', { version: bundle.providers.longbridgeCliVersion ?? '—' }),
-    t('diagnostics.summarySkills', {
-      loaded: bundle.skills.loaded,
-      capabilities: bundle.capabilities.available.length,
-    }),
+    t('diagnostics.summaryCapabilities', { count: bundle.capabilities.available.length }),
     t('diagnostics.summaryResources', {
       mode: bundle.resources.dev ? t('diagnostics.resourceModeDev') : t('diagnostics.resourceModePackaged'),
       root: bundle.resources.root,

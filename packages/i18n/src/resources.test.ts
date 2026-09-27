@@ -32,10 +32,10 @@ describe('translation resources (spec §7–9, §81–82)', () => {
   it('throws on broken parity (missing zh key / mismatched interpolation)', () => {
     // Simulate a zh-CN missing key by temporarily removing one.
     const zhNav = resources['zh-CN'].navigation as Record<string, string>;
-    const before = zhNav['today'];
-    delete zhNav['today'];
+    const before = zhNav['settings'];
+    delete zhNav['settings'];
     expect(() => assertKeyParity()).toThrow(/I18N_KEY_PARITY/);
-    zhNav['today'] = before;
+    zhNav['settings'] = before;
     expect(() => assertKeyParity()).not.toThrow();
   });
 

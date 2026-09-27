@@ -4,7 +4,7 @@
  *
  * Assistive, not authoritative: flags candidate USER-FACING string literals in
  * UI files so a human can review. Legit by design and NOT flagged:
- *   - domain identifiers (tickers, ids, tool names, currency codes, URLs)
+ *   - domain identifiers (project/task ids, tool names, URLs)
  *   - test-ids, class names, aria plumbing, data field keys
  *   - API/implementation strings (no letters or pure lowercase snake/camel)
  *   - historical-content rendering (stored user/AI text must NOT be translated)
@@ -27,7 +27,7 @@ const RESUMED_PATTERNS: Array<[RegExp, string]> = [
 ];
 
 const IDENTIFIER_RE =
-  /\b(AAPL|GOOGL|NVDA|MSFT|TSLA|AMD|META|AMZN|QQQ|SPY|USD|HKD|CNY|SGD|Longbridge|Folio|LangSmith|Pi|Agent|LLM|DeepSeek|Anthropic|OpenAI|Radix|Sonner)\b/;
+  /\b(Folio|Pi|Agent|LLM|Anthropic|OpenAI|Brave|Radix|Sonner|React|Electron|TypeScript|JSON|IPC|Windows)\b/;
 const DOTTED_KEY_RE = /^[a-z][a-zA-Z0-9]+\.[a-zA-Z0-9.]+(\.[a-zA-Z0-9]+)$/;
 const COLORISH_RE = /^(text|bg|border|className|data-|id=)/;
 

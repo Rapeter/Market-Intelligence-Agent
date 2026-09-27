@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -6,6 +7,7 @@ import {
   normalizeBusinessResearchInput,
   parseBusinessResearchId,
   type BusinessResearchEvidence,
+  type BusinessResearchProject,
 } from '@finagent/core';
 import { JsonFileStore } from '../storage/json-file-store.ts';
 import { createBusinessResearchEventLog } from './events.ts';
@@ -105,7 +107,85 @@ function subscriptionRecord(): BusinessResearchSubscriptionRecord {
   };
 }
 
+function legacyProjectId() {
+  const task = input();
+  const scope = JSON.stringify([
+    task.industry.trim().toLocaleLowerCase('en-US'),
+    [...task.competitors].map((item) => item.trim().toLocaleLowerCase('en-US')).sort(),
+  ]);
+  return id('project', `project-legacy-${createHash('sha256').update(scope).digest('hex').slice(0, 24)}`);
+}
+
 describe('BusinessResearchRepository', () => {
+  it('migrates existing runs and subscriptions into stable projects without rewriting unrelated records', async () => {
+    const store = tempStore();
+    const repository = new BusinessResearchRepository(store);
+    const run = runRecord();
+    const subscription = subscriptionRecord();
+    await repository.saveRun(run);
+    await repository.saveSubscription(subscription);
+
+    const projects = await repository.listProjects();
+    const migratedRun = await repository.getRun(run.id);
+    const migratedSubscription = await repository.getSubscription(subscription.id);
+
+    expect(projects).toHaveLength(1);
+    expect(projects[0]).toMatchObject({
+      title: 'Electric vehicles · Northstar Motors, Harbor Auto',
+      industry: 'Electric vehicles',
+    });
+    expect(migratedRun?.projectId).toBe(projects[0]?.id);
+    expect(migratedSubscription?.projectId).toBe(projects[0]?.id);
+    expect(await repository.listProjects()).toEqual(projects);
+    expect(migratedRun).toMatchObject({ task: run.task, state: run.state, createdAt: run.createdAt });
+  });
+
+  it('preserves an existing same-scope destination project and links legacy records to it', async () => {
+    const repository = new BusinessResearchRepository(tempStore());
+    const run = runRecord();
+    const subscription = subscriptionRecord();
+    const existingProject: BusinessResearchProject = {
+      id: legacyProjectId(),
+      title: 'My curated project title',
+      industry: run.task.industry,
+      competitors: [...run.task.competitors],
+      createdAt: 1_790_000_000_000,
+      updatedAt: 1_790_100_000_000,
+    };
+    await repository.saveProject(existingProject);
+    await repository.saveRun(run);
+    await repository.saveSubscription(subscription);
+
+    const projects = await repository.listProjects();
+
+    expect(projects).toEqual([existingProject]);
+    expect(await repository.getRun(run.id)).toMatchObject({ projectId: existingProject.id, task: run.task });
+    expect(await repository.getSubscription(subscription.id)).toMatchObject({ projectId: existingProject.id, task: subscription.task });
+  });
+
+  it('fails safely on a legacy destination id collision with a different topic before mutating legacy records', async () => {
+    const repository = new BusinessResearchRepository(tempStore());
+    const run = runRecord();
+    const subscription = subscriptionRecord();
+    const conflictingProject: BusinessResearchProject = {
+      id: legacyProjectId(),
+      title: 'Unrelated curated project',
+      industry: 'Healthcare',
+      competitors: ['Northstar Health', 'Harbor Care'],
+      createdAt: 1_790_000_000_000,
+      updatedAt: 1_790_100_000_000,
+    };
+    await repository.saveProject(conflictingProject);
+    await repository.saveRun(run);
+    await repository.saveSubscription(subscription);
+
+    await expect(repository.listProjects()).rejects.toThrow('Legacy project destination conflicts with an existing project.');
+
+    expect(await repository.getProject(conflictingProject.id)).toEqual(conflictingProject);
+    expect(await repository.getRun(run.id)).toEqual(run);
+    expect(await repository.getSubscription(subscription.id)).toEqual(subscription);
+  });
+
   it('persists validated run, event, evidence, report, and subscription records across repository instances', async () => {
     const store = tempStore();
     const repository = new BusinessResearchRepository(store);
@@ -123,13 +203,14 @@ describe('BusinessResearchRepository', () => {
 
     const reopened = new BusinessResearchRepository(store);
     expect(await reopened.getRun(run.id)).toEqual(run);
-    expect(await reopened.listRuns()).toEqual([run]);
+    expect(await reopened.listRuns()).toHaveLength(1);
+    expect(await reopened.listRuns()).toMatchObject([{ ...run, projectId: expect.any(String) }]);
     expect(await reopened.getEvents(run.id)).toEqual([startEvent]);
     expect(await reopened.getEvidence(run.id)).toEqual([evidence()]);
     expect(await reopened.getReport(reportRecord.id)).toEqual(reportRecord);
     expect(await reopened.listReports()).toEqual([reportRecord]);
-    expect(await reopened.getSubscription(subscription.id)).toEqual(subscription);
-    expect(await reopened.listSubscriptions()).toEqual([subscription]);
+    expect(await reopened.getSubscription(subscription.id)).toMatchObject({ ...subscription, projectId: expect.any(String) });
+    expect(await reopened.listSubscriptions()).toMatchObject([{ ...subscription, projectId: expect.any(String) }]);
   });
 
   it('rejects fixture grades paired with public source kinds', async () => {

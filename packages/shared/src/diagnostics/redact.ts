@@ -2,8 +2,8 @@
  * Secret redaction for diagnostics exports (spec §36).
  *
  * Applied before serialization so API keys, OAuth tokens, raw credentials,
- * and base64-ish blobs can never leave the machine. Private conversation
- * contents and portfolio details are never collected in the first place —
+ * and base64-ish blobs can never leave the machine. Conversation and research
+ * content are never collected in the first place —
  * redaction is the last line of defense for anything that slips through in a
  * message/stack string.
  */
@@ -13,8 +13,8 @@ const REDACTED = '[REDACTED]';
 export const REDACTION_POLICY =
   'Strips API keys (sk-/rk-/pk-/ak-…), AWS access keys (AKIA…), Bearer and ' +
   'X-Api-Key/Authorization tokens, JWTs, VCS tokens (gh*/github_pat_), ' +
-  'LangSmith keys (lsv2_pt_/lsv2_sk_…), and base64-ish blobs. Private ' +
-  'conversation contents and portfolio details are never collected.';
+  'LangSmith keys (lsv2_pt_/lsv2_sk_…), and base64-ish blobs. Conversation ' +
+  'and research content are never collected.';
 
 type Replacement = string;
 

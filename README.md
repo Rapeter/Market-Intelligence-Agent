@@ -1,4 +1,4 @@
-# Market Intelligence Agent
+# 企业经营研究工作台
 
 面向企业经营、战略和产品团队的桌面研究工作台。Agent 根据公开信息和每一步获得的证据，动态选择下一项研究动作，生成带来源、冲突与信息缺口的竞品和行业报告，并在应用运行时追踪新信息。
 
@@ -62,12 +62,14 @@ Folio 既有 Pi Agent 运行时与桌面基础
 
 ## 本地运行
 
-需要 Bun 和 Node.js。安装依赖并启动桌面开发模式：
+开发模式需要 Bun 和 Node.js。安装依赖并启动桌面开发模式：
 
 ```bash
 bun install
 bun run dev
 ```
+
+Windows 安装包已包含 Pi Runtime，安装后无需另装 Bun；实时研究仍需在应用设置中配置模型凭证，并提供 Brave Search 凭证。
 
 运行无需外部网络或 API 凭证的研究工作流验收：
 
@@ -85,7 +87,7 @@ bun run --filter @finagent/electron business-research:live-profile -- prepare "$
 node apps/electron/e2e/business-research-live-profile.mjs open "$liveProfile"
 ```
 
-应用窗口打开后，按需完成首次启动引导，在设置中配置模型提供方，并在 Market Intelligence 工作区配置 Brave Search。保存后回到终端按 Enter 关闭窗口；此档案会保留在本机供后续验收使用。脚本只会标记空目录或自己已标记的目录，并拒绝仓库内路径和未标记的非空目录。
+应用窗口打开后，在 **设置 → 模型** 中配置模型提供方和凭证；然后新建一个研究项目，在右侧 Agent 面板把运行模式切换为“实时研究”。此时中间的项目范围卡片会显示 Brave Search 凭证入口。保存后回到终端按 Enter 关闭窗口；档案会保留在本机供后续验收使用。脚本只会标记空目录或自己已标记的目录，并拒绝仓库内路径和未标记的非空目录。
 
 关闭设置窗口后，在同一 PowerShell 会话中运行真实验收。它会访问 Brave Search 和模型提供方、在专用档案中创建并随后停用一条验收订阅，可能产生供应商用量费用：
 
@@ -98,7 +100,7 @@ bun run --filter @finagent/electron test:e2e:business-research:live
 
 ## 项目历史与贡献
 
-我与 helsome 共同开发了 Folio。本仓库保留 Folio 的提交历史和既有贡献记录；Market Intelligence Agent 的企业研究领域、动态决策、公开信息追踪、评测集与演示材料在此仓库中实现并持续验证。Folio 原有的股票筛选、投资策略和评测案例不计为本项目新增的企业研究成果。
+我与 helsome 共同开发了 Folio。本仓库保留 Folio 的提交历史和既有贡献记录；企业经营研究领域、动态决策、公开信息追踪、评测集与演示材料在此仓库中实现并持续验证。Folio 原有的投资研究功能及评测案例不计为本项目新增成果。
 
 ## 状态
 

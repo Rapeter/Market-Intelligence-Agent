@@ -37,7 +37,7 @@ export function resolveElectronBinary(appRoot, repoRoot) {
   const candidates = [
     process.env.ELECTRON_BINARY,
     tryResolve(join(appRoot, 'node_modules/electron')),
-    join(repoRoot, 'node_modules/.bun/electron@39.8.9/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'),
+    join(repoRoot, 'node_modules/.bun/electron@39.8.9/node_modules/electron/dist/electron.exe'),
   ].filter(Boolean);
 
   const binary = candidates.find((candidate) => {
@@ -49,7 +49,7 @@ export function resolveElectronBinary(appRoot, repoRoot) {
   });
   if (!binary) {
     throw new Error(
-      `Electron binary not found. Checked: ${candidates.length > 0 ? candidates.join(', ') : '(no candidates)'}`
+      `Windows Electron binary not found. Checked: ${candidates.length > 0 ? candidates.join(', ') : '(no candidates)'}`
     );
   }
   return binary;

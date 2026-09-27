@@ -5,27 +5,17 @@ import type { SettingsTab } from '../../atoms';
 import { settingsTabAtom } from '../../atoms';
 import { GeneralTab } from './GeneralTab';
 import { ModelsTab } from './ModelsTab';
-import { ConnectionsCenter } from './ConnectionsCenter';
-import { SkillsView } from './SkillsView';
 import { DiagnosticsTab } from './DiagnosticsTab';
-import { EvaluationSettingsTab } from './EvaluationSettingsTab';
-import { PerformanceView } from '../performance/PerformanceView';
 import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 
 const TABS: Array<{ id: SettingsTab; labelKey: string }> = [
   { id: 'general', labelKey: 'settings.tabs.general' },
   { id: 'llm', labelKey: 'settings.tabs.llm' },
-  { id: 'connections', labelKey: 'settings.tabs.connections' },
 ];
 
 // V9 §71: advanced/developer surfaces are grouped, never equal-weight with the
 // everyday settings a normal user touches.
 const ADVANCED_TABS: Array<{ id: SettingsTab; labelKey: string }> = [
-  { id: 'skills', labelKey: 'settings.tabs.skills' },
-  // Performance tab (V5 spec §36–38) — aggregates opinion outcomes.
-  { id: 'performance', labelKey: 'settings.tabs.performance' },
-  // Agent evaluation (V7 spec §61–63) — LangSmith connection + tracing.
-  { id: 'evaluation', labelKey: 'settings.tabs.evaluation' },
   { id: 'diagnostics', labelKey: 'settings.tabs.diagnostics' },
 ];
 
@@ -53,11 +43,7 @@ export const SettingsView: React.FC = () => {
       <div className="flex-1 overflow-y-auto px-8 py-7">
         {tab === 'general' && <GeneralTab />}
         {tab === 'llm' && <ModelsTab />}
-        {tab === 'connections' && <ConnectionsCenter />}
-        {tab === 'skills' && <SkillsView />}
         {tab === 'diagnostics' && <DiagnosticsTab />}
-        {tab === ('performance') && <PerformanceView />}
-        {tab === 'evaluation' && <EvaluationSettingsTab />}
       </div>
     </main>
   );

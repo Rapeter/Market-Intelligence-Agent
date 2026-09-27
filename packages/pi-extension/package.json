@@ -7,10 +7,7 @@
   "exports": {
     ".": "./src/index.ts"
   },
-  "dependencies": {
-    "@finagent/shared": "workspace:*",
-    "@sinclair/typebox": "^0.34.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "typescript": "^5.6.0"
   }

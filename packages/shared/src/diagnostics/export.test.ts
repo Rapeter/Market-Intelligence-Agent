@@ -16,24 +16,9 @@ function makeBundle(): DiagnosticsBundle {
     runtime: { agent: { providerId: 'local', state: 'idle' } },
     providers: {
       llm: { id: 'anthropic', model: 'claude-3-5-sonnet-20241022' },
-      financial: [
-        { id: 'longbridge', status: 'connected', coverage: { capabilities: ['market.quote'], markets: ['US'] } },
-      ],
-      broker: { connected: true, accountCount: 1 },
-      longbridgeCliVersion: '0.17.0',
     },
-    skills: { loaded: 3 },
-    capabilities: { available: ['market.quote'] },
+    capabilities: { available: ['business-research.projects'] },
     resources: { dev: true, root: '/repo' },
-    evaluation: {
-      backend: 'none',
-      tracingEnabled: false,
-      privacyLevel: 'standard',
-      project: 'folio-agent',
-      connected: null,
-      traceStatus: 'disabled',
-      datasets: ['folio-agent-v1'],
-    },
     pi: {
       status: 'idle',
       command: null,
@@ -44,7 +29,6 @@ function makeBundle(): DiagnosticsBundle {
       lastExitCode: null,
       lastExitSignal: null,
       stderrTail: null,
-      observabilityDegraded: null,
     },
     errors: [
       // A secret smuggled into an error message must be stripped on export.

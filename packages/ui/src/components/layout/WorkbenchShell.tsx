@@ -6,8 +6,8 @@ import { agentPanelVisibleAtom } from '../../atoms';
 import { readPersisted, writePersisted } from '../../lib/persistedPrefs';
 import { ErrorBoundary } from '../primitives/ErrorBoundary';
 import { Sidebar } from './Sidebar';
-import { FinanceWorkspace } from '../workspace/FinanceWorkspace';
-import { AgentPanel } from '../agent/AgentPanel';
+import { ProductWorkspace } from '../workspace/ProductWorkspace';
+import { BusinessResearchAgentPanel } from '../businessResearch/BusinessResearchAgentPanel';
 import { WorkspaceTopbar } from './WorkspaceTopbar';
 
 const SIZES_KEY = 'allotmentSizes';
@@ -61,7 +61,7 @@ export const WorkbenchShell: React.FC = () => {
             <div className="flex h-full min-h-0 flex-col">
               <WorkspaceTopbar />
               <div className="min-h-0 flex-1">
-                <FinanceWorkspace />
+              <ProductWorkspace />
               </div>
             </div>
           </ErrorBoundary>
@@ -69,7 +69,7 @@ export const WorkbenchShell: React.FC = () => {
         {showAgent && (
           <Allotment.Pane minSize={320} preferredSize={normalized[2]} snap>
             <ErrorBoundary>
-              <AgentPanel />
+            <BusinessResearchAgentPanel />
             </ErrorBoundary>
           </Allotment.Pane>
         )}

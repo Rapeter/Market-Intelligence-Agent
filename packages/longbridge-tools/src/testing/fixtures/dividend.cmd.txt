@@ -1,1 +1,0 @@
-longbridge dividend NVDA.US --format json

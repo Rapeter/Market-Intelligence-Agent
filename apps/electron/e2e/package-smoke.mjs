@@ -1,225 +1,113 @@
-// Folio packaged-app smoke test — launches the electron-builder output from
-// OUTSIDE the source repo and asserts the packaged app is self-contained:
-// window renders, skills load from process.resourcesPath, agent tools are
-// present, and a local agent run completes.
-//
-//   bun run test:package-smoke
-//
-// Prerequisite: `bun run package` must have produced the configured product app bundle.
-
-import { execSync, spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { buildElectronEnvironment, reserveCdpPort, waitForCdp } from './electron-harness.mjs';
+import { terminateProcessTree } from './process-tree.mjs';
+import { seedLocale } from './seed-locale.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright-core');
-
-const here = dirname(fileURLToPath(import.meta.url));
-const appRoot = join(here, '..');
-const packageMetadata = JSON.parse(readFileSync(join(appRoot, 'package.json'), 'utf8'));
-const productName = packageMetadata.build.productName;
-const repoRoot = join(here, '../../..');
-const distDir = join(repoRoot, 'dist', 'electron');
-
-const CDP_PORT = 9334;
-const CDP_URL = `http://127.0.0.1:${CDP_PORT}`;
-
-// FINAGENT_E2E_KEEP_OPEN=1 — debugging only, NEVER in automated runs: leave
-// the app running when the harness finishes and print where it is, instead of
-// killing it. Automated runs/CI rely on the harness cleaning up its port.
-const KEEP_OPEN = process.env.FINAGENT_E2E_KEEP_OPEN === '1';
-function shutdown(appProcess) {
-  if (KEEP_OPEN) {
-    console.log(
-      `KEEP_OPEN CDP port ${CDP_PORT} — app left running; clean up yourself: pkill -f 'remote-debugging-port=${CDP_PORT}'`
-    );
-    return
-  }
-  appProcess.kill()
+const here = new URL('.', import.meta.url);
+const appRoot = fileURLToPath(new URL('..', here));
+const repoRoot = resolve(appRoot, '../..');
+const packageMetadata = JSON.parse(await import('node:fs/promises').then(({ readFile }) => readFile(join(appRoot, 'package.json'), 'utf8')));
+const distDirectory = join(repoRoot, 'dist', 'electron');
+const requestedAppBinary = process.env.FINAGENT_PACKAGE_SMOKE_BINARY;
+if (requestedAppBinary && !isAbsolute(requestedAppBinary)) {
+  throw new Error('FINAGENT_PACKAGE_SMOKE_BINARY must be an absolute path.');
 }
+const appBinary = requestedAppBinary ?? join(distDirectory, 'win-unpacked', `${packageMetadata.build.productName}.exe`);
+if (process.platform !== 'win32') throw new Error('Packaged smoke acceptance must run on Windows.');
+if (!existsSync(appBinary)) throw new Error(`Packaged Windows app not found at ${appBinary}. Run bun run release:package first.`);
 
-let failures = 0;
+const userDataDirectory = mkdtempSync(join(tmpdir(), 'market-intelligence-packaged-smoke-'));
+assertSafeTemporaryPath(userDataDirectory);
+seedLocale(userDataDirectory, 'en-US');
+const port = await reserveCdpPort();
+const logPath = join(userDataDirectory, 'electron.log');
+const appEnvironment = buildElectronEnvironment({ userDataDir: userDataDirectory, agentProvider: 'pi-runtime' });
+delete appEnvironment.FINAGENT_PI_COMMAND;
+const appProcess = spawn(appBinary, [
+  `--remote-debugging-port=${port}`,
+  '--remote-debugging-address=127.0.0.1',
+  '--no-sandbox',
+  '--disable-gpu',
+], {
+  cwd: tmpdir(),
+  stdio: 'ignore',
+  env: { ...appEnvironment, FINAGENT_PACKAGED: '1' },
+});
 
-function pass(name) {
-  console.log(`PASS  ${name}`);
-}
-
-function fail(name, error) {
-  failures += 1;
-  console.error(`FAIL  ${name}`);
-  console.error(String(error?.stack ?? error).slice(0, 2000));
-}
-
-function findAppBinary() {
-  if (!existsSync(distDir)) {
-    throw new Error(`No dist output at ${distDir}. Run \`bun run package\` first.`);
-  }
-  for (const entry of readdirSync(distDir)) {
-    if (!entry.startsWith('mac')) continue;
-    const candidate = join(distDir, entry, `${productName}.app`, 'Contents', 'MacOS', productName);
-    if (existsSync(candidate) && statSync(candidate).isFile()) {
-      return candidate;
-    }
-  }
-  throw new Error(`No ${productName}.app binary found under ${distDir}/mac*.`);
-}
-
-async function waitForPage(context, timeoutMs) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const pages = context.pages();
-    if (pages.length > 0) return pages[pages.length - 1];
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  throw new Error('No renderer page appeared in time');
-}
-
-async function waitForCdp(timeoutMs) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetch(`${CDP_URL}/json/version`);
-      if (response.ok) return;
-    } catch {
-      // Not up yet.
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  throw new Error('Packaged app CDP endpoint did not come up in time.');
-}
-
-function evaluateIpC(page, expr) {
-  return page.evaluate(`(async () => (${expr}))()`);
-}
-
-async function main() {
-  const appBinary = findAppBinary();
-  console.log(`Launching ${appBinary}`);
-  // Stale instances from interrupted runs hold the CDP port — kill first.
-  try {
-    execSync("pkill -f 'remote-debugging-port=9334' || true", { stdio: 'ignore' });
-  } catch {
-    // Nothing to clean.
-  }
-  const userDataDir = mkdtempSync(join(tmpdir(), 'folio-smoke-'));
-
-  const appProcess = spawn(appBinary, [`--remote-debugging-port=${CDP_PORT}`, '--no-sandbox'], {
-    cwd: tmpdir(),
-    stdio: 'ignore',
-    env: {
-      ...process.env,
-      FINAGENT_AGENT_PROVIDER: 'local',
-      FINAGENT_E2E: '1',
-      FINAGENT_E2E_HIDDEN: '1',
-      FINAGENT_USER_DATA_DIR: userDataDir,
-    },
+let browser;
+let primaryError;
+let cleanupError;
+const rendererDiagnostics = [];
+try {
+  await waitForCdp({ url: `http://127.0.0.1:${port}`, timeoutMs: 60_000, proc: appProcess, logPath });
+  browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`, { timeout: 30_000 });
+  const context = browser.contexts()[0];
+  const page = context.pages()[0] ?? await context.waitForEvent('page', { timeout: 30_000 });
+  page.on('pageerror', (error) => rendererDiagnostics.push(`pageerror: ${error.stack ?? error.message}`));
+  page.on('console', (message) => {
+    if (message.type() === 'error') rendererDiagnostics.push(`console: ${message.text()}`);
   });
-
-  let browser;
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForFunction(() => Boolean(window.electronAPI?.businessResearch), null, { timeout: 30_000 });
+  const runtimeState = await page.evaluate(() => window.electronAPI.llm.getState());
+  assert.equal(runtimeState?.ok, true, `The packaged Pi runtime did not start: ${runtimeState?.error?.message ?? 'unknown IPC error'}`);
+  assert.equal(runtimeState?.data?.runtimeProvider, 'pi-runtime');
+  await page.getByRole('button', { name: 'New project', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Project name', exact: true }).fill('Packaged desktop smoke');
+  await page.getByRole('textbox', { name: 'Industry', exact: true }).fill('Enterprise software');
+  await page.getByRole('textbox', { name: 'Competitors', exact: true }).fill('Northstar Systems\nHarbor Cloud');
+  await page.getByRole('button', { name: 'Create project', exact: true }).click();
+  await page.getByTestId('business-research-workspace').waitFor({ state: 'visible', timeout: 15_000 });
+  const result = await page.evaluate(() => window.electronAPI.businessResearch.listProjects());
+  assert.equal(result?.ok, true, 'Packaged preload could not access the project API.');
+  const project = result.data.find((item) => item.title === 'Packaged desktop smoke');
+  assert.ok(project, 'The packaged app did not persist a newly created project.');
+  const visibleText = await page.locator('body').innerText();
+  assert.doesNotMatch(visibleText, /\b(?:stocks?|quotes?|portfolio|longbridge|investment thesis|screening)\b/iu);
+  console.log(`PASS packaged Windows app: created project ${project.id} through the bundled UI and preload.`);
+} catch (error) {
+  const page = browser?.contexts()[0]?.pages()[0];
+  const pageState = page
+    ? await page.evaluate(() => ({
+        title: document.title,
+        url: location.href,
+        text: document.body?.innerText?.slice(0, 4000) ?? '',
+        buttons: [...document.querySelectorAll('button')].map((button) => button.innerText.trim()).filter(Boolean),
+      })).catch((diagnosticError) => ({ evaluationError: diagnosticError.message }))
+    : null;
+  primaryError = new Error(`${error instanceof Error ? error.message : error}. Packaged renderer state: ${JSON.stringify({ pageState, rendererDiagnostics })}`, { cause: error });
+} finally {
+  await browser?.close().catch(() => undefined);
   try {
-    await waitForCdp(60_000);
-    browser = await chromium.connectOverCDP(CDP_URL, { timeout: 30_000 });
-    const context = browser.contexts()[0];
-    const page = await waitForPage(context, 30_000);
-    await page.waitForLoadState('domcontentloaded');
-
-    // A. Window renders + preload bridge is present.
-    try {
-      await page.locator('[data-testid="finance-workspace"]').waitFor({ timeout: 20_000 });
-      const hasBridge = await page.evaluate(() => Boolean(window.electronAPI));
-      if (!hasBridge) throw new Error('window.electronAPI is not exposed (preload failed).');
-      pass('A: workbench renders + preload bridge present');
-    } catch (error) {
-      fail('A: workbench renders + preload bridge present', error);
-    }
-
-    // B. Skills load from the packaged resources.
-    try {
-      const result = await evaluateIpC(page, 'window.electronAPI.skills.list()');
-      if (!result?.ok) throw new Error(`skills:list failed: ${JSON.stringify(result)}`);
-      const skills = result.data;
-      if (!Array.isArray(skills) || skills.length < 10) {
-        throw new Error(`expected >=10 skills, got ${skills?.length}`);
-      }
-      console.log(`  skills loaded: ${skills.length}`);
-      pass('B: skills:list returns >=10 skills');
-    } catch (error) {
-      fail('B: skills:list returns >=10 skills', error);
-    }
-
-    // C. Agent tools include finance tools.
-    try {
-      const result = await evaluateIpC(page, 'window.electronAPI.agent.getTools()');
-      if (!result?.ok) throw new Error(`agent:getTools failed: ${JSON.stringify(result)}`);
-      const inner = result.data;
-      const tools = Array.isArray(inner) ? inner : inner?.data;
-      if (!Array.isArray(tools)) throw new Error(`agent:getTools returned no tools: ${JSON.stringify(result)}`);
-      const names = new Set(tools.map((tool) => tool.name));
-      for (const expected of ['get_quote', 'get_portfolio', 'get_market_depth', 'get_financials', 'get_calendar_events']) {
-        if (!names.has(expected)) {
-          throw new Error(`finance tool missing: ${expected}; have [${[...names].join(', ')}]`);
-        }
-      }
-      console.log(`  tools: ${names.size} (${[...names].slice(0, 8).join(', ')}${names.size > 8 ? ', …' : ''})`);
-      pass('C: agent:getTools includes finance tools');
-    } catch (error) {
-      fail('C: agent:getTools includes finance tools', error);
-    }
-
-    // D. Create a session and run a local agent run to completion.
-    try {
-      const created = await evaluateIpC(page, 'window.electronAPI.kernel.createSession("Smoke")');
-      if (!created?.ok) throw new Error(`sessions:create failed: ${JSON.stringify(created)}`);
-      const sessionId = created.data?.id;
-      if (!sessionId) throw new Error(`sessions:create returned no id: ${JSON.stringify(created)}`);
-
-      const started = await evaluateIpC(
-        page,
-        `window.electronAPI.kernel.startRun({ sessionId: ${JSON.stringify(sessionId)}, content: 'Hello, are you there?' })`
-      );
-      if (!started?.ok) throw new Error(`runs:start failed: ${JSON.stringify(started)}`);
-      const runId = started.data?.id;
-      if (!runId) throw new Error(`runs:start returned no run id: ${JSON.stringify(started)}`);
-
-      // Poll listRuns until the run settles (completed/failed/cancelled).
-      const deadline = Date.now() + 30_000;
-      let run = null;
-      while (Date.now() < deadline) {
-        const runs = await evaluateIpC(
-          page,
-          `window.electronAPI.kernel.listRuns(${JSON.stringify(sessionId)})`
-        );
-        const candidate = runs?.ok && Array.isArray(runs.data) ? runs.data.find((r) => r.id === runId) : undefined;
-        if (candidate && candidate.status !== 'running') {
-          run = candidate;
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 250));
-      }
-      if (!run) throw new Error('run did not settle within 30s');
-      if (run.status !== 'completed') {
-        throw new Error(`run settled as ${run.status}: ${JSON.stringify(run.error ?? run.answer ?? '')}`);
-      }
-      console.log(`  run ${run.id} completed: "${String(run.answer).slice(0, 80)}"`);
-      pass('D: sessions:create + local run completes');
-    } catch (error) {
-      fail('D: sessions:create + local run completes', error);
-    }
+    await terminateProcessTree(appProcess);
   } catch (error) {
-    fail('harness setup', error);
-  } finally {
-    await browser?.close().catch(() => undefined);
-    shutdown(appProcess)
+    cleanupError = error;
   }
-
-  if (failures > 0) {
-    console.error(`Package smoke failed: ${failures} step(s).`);
-    process.exit(1);
+  if (appProcess.exitCode !== null || appProcess.signalCode !== null) {
+    assertSafeTemporaryPath(userDataDirectory);
+    try {
+      rmSync(userDataDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    } catch (error) {
+      cleanupError ??= error;
+    }
+  } else {
+    cleanupError ??= new Error('The packaged smoke app is still running; refusing to delete its temporary profile.');
   }
-  console.log('Packaged app smoke passed.');
 }
+if (primaryError) throw primaryError;
+if (cleanupError) throw cleanupError;
 
-main();
+function assertSafeTemporaryPath(path) {
+  const relativePath = relative(resolve(tmpdir()), resolve(path));
+  if (!relativePath || relativePath.startsWith('..') || isAbsolute(relativePath)) {
+    throw new Error('Refusing to clean a packaged smoke profile outside its unique OS temporary directory.');
+  }
+}

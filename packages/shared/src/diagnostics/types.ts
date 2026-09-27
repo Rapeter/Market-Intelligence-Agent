@@ -1,5 +1,3 @@
-import type { CapabilityRegistry } from '@finagent/core';
-
 /**
  * Diagnostics domain (spec §35–36).
  *
@@ -7,29 +5,19 @@ import type { CapabilityRegistry } from '@finagent/core';
  * `undefined`), so a collected bundle survives `JSON.stringify` →
  * `JSON.parse` unchanged. No secret material is ever represented here —
  * provider ids/models are the most identifying fields we keep; keys, tokens,
- * conversation contents, and portfolio details are excluded by construction.
+ * private conversation and research content are excluded by construction.
  */
 
 /** One entry in the last-errors ring buffer (already redacted at push time). */
 export interface ErrorLogEntry {
   /** Epoch ms the error was recorded. */
   at: number;
-  /** Where the error originated: renderer | main | agent | longbridge. */
+  /** Where the error originated: renderer | main | agent. */
   source: string | null;
   /** User-safe message; raw vendor output is never retained. */
   message: string;
   /** Stack trace, already redacted. */
   stack: string | null;
-}
-
-/** Health/coverage summary for one financial/broker provider (spec §35). */
-export interface FinancialProviderSummary {
-  id: string;
-  status: string;
-  coverage: {
-    capabilities: string[];
-    markets: string[];
-  };
 }
 
 /** Inputs the main-process collector gathers before assembling the bundle. */
@@ -42,26 +30,12 @@ export interface DiagnosticsInput {
   agentState: string | null;
   llmProviderId: string | null;
   llmModel: string | null;
-  financialProviders: FinancialProviderSummary[];
-  brokerConnected: boolean;
-  brokerAccountCount: number;
-  skillsLoadedCount: number;
-  capabilities: CapabilityRegistry | null;
+  capabilities: string[];
   resources: {
     dev: boolean;
     root: string;
   };
-  /** V7 evaluation/observability status (spec §86) — never a secret. */
-  evaluation: {
-    backend: 'langsmith' | 'langfuse' | 'local' | 'none' | null;
-    tracingEnabled: boolean;
-    privacyLevel: string | null;
-    project: string | null;
-    connected: boolean | null;
-    traceStatus: string | null;
-    datasets: string[];
-  };
-  /** V8.1 §40: Pi runtime facts (sanitized — no secrets, capped stderr). */
+  /** Pi runtime facts (sanitized — no secrets, capped stderr). */
   pi: {
     status: 'idle' | 'running' | 'exited' | 'restarting' | 'unknown';
     command: string | null;
@@ -72,7 +46,6 @@ export interface DiagnosticsInput {
     lastExitCode: number | null;
     lastExitSignal: string | null;
     stderrTail: string | null;
-    observabilityDegraded: boolean | null;
   };
   errors: ErrorLogEntry[];
 }
@@ -99,15 +72,6 @@ export interface DiagnosticsBundle {
       id: string | null;
       model: string | null;
     };
-    financial: FinancialProviderSummary[];
-    broker: {
-      connected: boolean;
-      accountCount: number;
-    };
-    longbridgeCliVersion: string | null;
-  };
-  skills: {
-    loaded: number;
   };
   capabilities: {
     available: string[];
@@ -116,17 +80,7 @@ export interface DiagnosticsBundle {
     dev: boolean;
     root: string;
   };
-  /** V7 evaluation/observability status (spec §86) — state only, never secrets. */
-  evaluation: {
-    backend: 'langsmith' | 'langfuse' | 'local' | 'none' | null;
-    tracingEnabled: boolean;
-    privacyLevel: string | null;
-    project: string | null;
-    connected: boolean | null;
-    traceStatus: string | null;
-    datasets: string[];
-  };
-  /** V8.1 §40: Pi runtime facts (sanitized — no secrets, capped stderr). */
+  /** Pi runtime facts (sanitized — no secrets, capped stderr). */
   pi: {
     status: 'idle' | 'running' | 'exited' | 'restarting' | 'unknown';
     command: string | null;
@@ -137,7 +91,6 @@ export interface DiagnosticsBundle {
     lastExitCode: number | null;
     lastExitSignal: string | null;
     stderrTail: string | null;
-    observabilityDegraded: boolean | null;
   };
   errors: ErrorLogEntry[];
   redaction: {

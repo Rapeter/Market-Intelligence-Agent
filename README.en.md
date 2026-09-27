@@ -1,4 +1,4 @@
-# Market Intelligence Agent
+# Enterprise Research Workbench
 
 A desktop research workspace for business, strategy, and product teams. The agent uses public information and observed evidence to choose its next research step, then produces competitor and industry reports with sources, conflicts, and gaps. While the app is running, it can track new public information for saved topics.
 
@@ -62,12 +62,14 @@ Existing Folio Pi Agent runtime and desktop foundation
 
 ## Run Locally
 
-Requires Bun and Node.js.
+Development requires Bun and Node.js.
 
 ```bash
 bun install
 bun run dev
 ```
+
+The Windows installer bundles the Pi runtime, so users do not need to install Bun separately. Live research still requires a configured model provider and Brave Search credential in the app.
 
 Run the research-flow acceptance test without external network access or API credentials:
 
@@ -85,7 +87,7 @@ bun run --filter @finagent/electron business-research:live-profile -- prepare "$
 node apps/electron/e2e/business-research-live-profile.mjs open "$liveProfile"
 ```
 
-When the window opens, complete first-run onboarding if needed, configure a model provider in Settings and Brave Search in the Market Intelligence workspace. Return to the terminal and press Enter to close the window after saving; this profile remains on the local machine for later acceptance runs. The script marks only an empty directory or one it has already marked, and refuses repository paths and unmarked non-empty directories.
+When the window opens, configure a model provider and credential in **Settings → Models**. Then create a research project and switch the right Agent panel to **Live research**; the project-scope card in the center pane will show the Brave Search credential field. Return to the terminal and press Enter to close the window after saving; this profile remains on the local machine for later acceptance runs. The script marks only an empty directory or one it has already marked, and refuses repository paths and unmarked non-empty directories.
 
 After closing the setup window, run live acceptance in the same PowerShell session. It accesses Brave Search and the configured model provider, creates and then disables one acceptance subscription in the dedicated profile, and may incur provider usage charges:
 
@@ -98,7 +100,7 @@ On success, the run writes the redacted record `docs/demos/business-research/liv
 
 ## Project History and Contributions
 
-I co-developed Folio with helsome. This repository preserves Folio's commit history and prior contribution records. The business-research domain, dynamic decisions, public-information monitoring, evaluation cases, and demo materials for Market Intelligence Agent have been implemented here and continue to be verified. Folio's existing stock-screening tasks, investment strategies, and evaluation cases are not counted as new enterprise-research work in this project.
+I co-developed Folio with helsome. This repository preserves Folio's commit history and prior contribution records. The enterprise-research domain, dynamic decisions, public-information monitoring, evaluation cases, and demo materials have been implemented here and continue to be verified. Folio's existing investment-research features and evaluation cases are not counted as new enterprise-research work in this project.
 
 ## Status
 

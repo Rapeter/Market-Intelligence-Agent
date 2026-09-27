@@ -3,15 +3,16 @@
 //
 //   bun run release:check
 //
-// Enforces the hard release gates from docs/release-gates.md in order:
+// Enforces the Windows desktop release gates in order:
 //   1. unit/integration tests (`bun run test:unit`)
 //   2. typecheck (`bun run typecheck`)
 //   3. build (`bun run build`)
-//   4. electron e2e golden path, local provider (FINAGENT_AGENT_PROVIDER=local)
-//   5. package (`bun run release:package` — DMG + SHA256SUMS.txt)
+//   4. enterprise research Electron E2E (fixture mode, no credentials)
+//   5. package (`bun run release:package` — Windows NSIS + SHA256SUMS.txt)
 //   6. packaged smoke (`bun run test:package-smoke`)
+//   7. installer install/uninstall smoke (`bun run test:installer-smoke`)
 //
-// Exits non-zero on the first gate failure; a red run is NOT RELEASEABLE.
+// Runs every gate and exits non-zero if any fail; a red run is NOT RELEASEABLE.
 
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
@@ -41,14 +42,13 @@ const GATES = [
     cwd: repoRoot,
   },
   {
-    name: 'electron e2e (local provider)',
+    name: 'enterprise research Electron E2E',
     command: 'bun',
-    args: ['run', 'test:e2e'],
+    args: ['run', 'test:e2e:business-research'],
     cwd: electronRoot,
-    env: { FINAGENT_AGENT_PROVIDER: 'local' },
   },
   {
-    name: 'package (DMG + checksums)',
+    name: 'Windows package (NSIS + checksums)',
     command: 'bun',
     args: ['run', 'release:package'],
     cwd: repoRoot,
@@ -60,17 +60,10 @@ const GATES = [
     cwd: electronRoot,
   },
   {
-    name: 'fresh-install release e2e (packaged app)',
+    name: 'Windows installer install/uninstall smoke',
     command: 'bun',
-    args: ['run', 'test:fresh-install'],
+    args: ['run', 'test:installer-smoke'],
     cwd: electronRoot,
-  },
-  {
-    name: 'v5 e2e (discover/import/automation/outcome)',
-    command: 'bun',
-    args: ['run', 'test:v5'],
-    cwd: electronRoot,
-    env: { FINAGENT_AGENT_PROVIDER: 'local' },
   },
 ];
 

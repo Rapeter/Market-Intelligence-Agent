@@ -1,8 +1,10 @@
 export interface BusinessResearchBridgeApi {
+  createProject: (input: { title: string; industry: string; competitors: string[] }) => Promise<unknown>;
+  listProjects: () => Promise<unknown>;
   getCredentialStatus: () => Promise<unknown>;
   setBraveKey: (input: { apiKey: string }) => Promise<unknown>;
   removeBraveKey: () => Promise<unknown>;
-  start: (input: { task: unknown; mode?: 'live' | 'fixture' }) => Promise<unknown>;
+  start: (input: { task: unknown; mode?: 'live' | 'fixture'; projectId?: string; parentRunId?: string }) => Promise<unknown>;
   cancel: (input: { runId: string }) => Promise<unknown>;
   listRuns: () => Promise<unknown>;
   getRun: (input: { runId: string }) => Promise<unknown>;
@@ -10,7 +12,7 @@ export interface BusinessResearchBridgeApi {
   listReports: () => Promise<unknown>;
   getReport: (input: { reportId: string }) => Promise<unknown>;
   evaluate: () => Promise<unknown>;
-  subscribe: (input: { task: unknown; intervalMs?: number }) => Promise<unknown>;
+  subscribe: (input: { task: unknown; intervalMs?: number; projectId?: string }) => Promise<unknown>;
   unsubscribe: (input: { subscriptionId: string }) => Promise<unknown>;
   resumeSubscription: (input: { subscriptionId: string }) => Promise<unknown>;
   removeSubscription: (input: { subscriptionId: string }) => Promise<unknown>;
@@ -24,6 +26,8 @@ export type BusinessResearchIpcInvoke = (channel: string, ...args: unknown[]) =>
 /** Fixed, typed IPC surface; renderer code cannot choose arbitrary channels. */
 export function createBusinessResearchBridge(invoke: BusinessResearchIpcInvoke): BusinessResearchBridgeApi {
   return {
+    createProject: (input) => invoke('businessResearch:createProject', input),
+    listProjects: () => invoke('businessResearch:listProjects'),
     getCredentialStatus: () => invoke('businessResearch:getCredentialStatus'),
     setBraveKey: (input) => invoke('businessResearch:setBraveKey', input),
     removeBraveKey: () => invoke('businessResearch:removeBraveKey'),

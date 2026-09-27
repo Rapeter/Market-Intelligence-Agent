@@ -1,5 +1,6 @@
 import { readdir } from 'node:fs/promises';
 import { Buffer } from 'node:buffer';
+import { createHash } from 'node:crypto';
 import {
   isBusinessResearchEvidenceGrade,
   isBusinessResearchRunStatus,
@@ -12,6 +13,8 @@ import {
   type BusinessResearchEvidenceId,
   type BusinessResearchEventId,
   type BusinessResearchIdKind,
+  type BusinessResearchProject,
+  type BusinessResearchProjectId,
   type BusinessResearchReportId,
   type BusinessResearchRunId,
   type BusinessResearchRunMode,
@@ -38,6 +41,8 @@ const EVIDENCE_FILE = 'evidence.json';
 const CHECKS_FILE = 'checks.json';
 const FINGERPRINTS_FILE = 'fingerprints.json';
 const SOURCES_FILE = 'sources.json';
+const PROJECTS_DIR = `${ROOT}/projects`;
+const PROJECT_FILE = 'record.json';
 const MIN_INTERVAL_MS = 60 * 60 * 1_000;
 
 type ParsedBusinessResearchId<Kind extends BusinessResearchIdKind> = NonNullable<
@@ -48,6 +53,9 @@ const fileLocks = new Map<string, Promise<void>>();
 
 export interface BusinessResearchRunRecord {
   id: BusinessResearchRunId;
+  /** Missing only on legacy records; list operations assign it during migration. */
+  projectId?: BusinessResearchProjectId;
+  parentRunId?: BusinessResearchRunId;
   task: BusinessResearchTaskInput;
   /** Absent only on records created before run modes were introduced. */
   mode?: BusinessResearchRunMode;
@@ -59,6 +67,8 @@ export interface BusinessResearchRunRecord {
 
 export interface BusinessResearchSubscriptionRecord {
   id: BusinessResearchSubscriptionId;
+  /** Missing only on legacy records; list operations assign it during migration. */
+  projectId?: BusinessResearchProjectId;
   task: BusinessResearchTaskInput;
   intervalMs: number;
   enabled: boolean;
@@ -111,6 +121,7 @@ interface SourceFile {
 /** Persists each run artifact as an independently validated atomic JSON record under userData. */
 export class BusinessResearchRepository {
   private readonly store: JsonFileStore;
+  private legacyMigration?: Promise<void>;
 
   constructor(store: JsonFileStore) {
     this.store = store;
@@ -134,6 +145,7 @@ export class BusinessResearchRepository {
   }
 
   async listRuns(): Promise<BusinessResearchRunRecord[]> {
+    await this.ensureLegacyProjects();
     const runs = await Promise.all((await this.listRunIds()).map((runId) => this.getRun(runId)));
     return runs.filter(isDefined).sort((left, right) => right.updatedAt - left.updatedAt || left.id.localeCompare(right.id));
   }
@@ -210,11 +222,31 @@ export class BusinessResearchRepository {
     return structuredClone(value);
   }
 
+  async saveProject(project: BusinessResearchProject): Promise<void> {
+    assertProject(project);
+    await this.store.write(this.projectFile(project.id), structuredClone(project));
+  }
+
+  async getProject(projectId: BusinessResearchProjectId): Promise<BusinessResearchProject | undefined> {
+    assertId('project', projectId);
+    const value = await this.store.read<unknown>(this.projectFile(projectId), null);
+    if (value === null) return undefined;
+    if (!isProject(value) || value.id !== projectId) throw corruptRecord('project', projectId);
+    return structuredClone(value);
+  }
+
+  async listProjects(): Promise<BusinessResearchProject[]> {
+    await this.ensureLegacyProjects();
+    const projects = await Promise.all((await this.listIds('project', PROJECTS_DIR)).map((id) => this.getProject(id)));
+    return projects.filter(isDefined).sort((left, right) => right.updatedAt - left.updatedAt || left.id.localeCompare(right.id));
+  }
+
   async listSubscriptionIds(): Promise<BusinessResearchSubscriptionId[]> {
     return this.listIds('subscription', `${ROOT}/subscriptions`);
   }
 
   async listSubscriptions(): Promise<BusinessResearchSubscriptionRecord[]> {
+    await this.ensureLegacyProjects();
     const subscriptions = await Promise.all((await this.listSubscriptionIds()).map((id) => this.getSubscription(id)));
     return subscriptions.filter(isDefined).sort((left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id));
   }
@@ -301,6 +333,11 @@ export class BusinessResearchRepository {
     return `${ROOT}/runs/${storageKey(runId)}/${file}`;
   }
 
+  private projectFile(projectId: BusinessResearchProjectId): string {
+    assertId('project', projectId);
+    return `${PROJECTS_DIR}/${storageKey(projectId)}/${PROJECT_FILE}`;
+  }
+
   private reportFile(reportId: BusinessResearchReportId): string {
     assertId('report', reportId);
     return `${ROOT}/reports/${storageKey(reportId)}/${RECORD_FILE}`;
@@ -338,7 +375,87 @@ export class BusinessResearchRepository {
     return file;
   }
 
-  private async listIds<Kind extends 'run' | 'report' | 'subscription'>(
+  private ensureLegacyProjects(): Promise<void> {
+    if (this.legacyMigration !== undefined) return this.legacyMigration;
+    this.legacyMigration = this.migrateLegacyProjects().catch((error: unknown) => {
+      this.legacyMigration = undefined;
+      throw error;
+    });
+    return this.legacyMigration;
+  }
+
+  private async migrateLegacyProjects(): Promise<void> {
+    const runs = await Promise.all((await this.listRunIds()).map((id) => this.getRun(id)));
+    const subscriptions = await Promise.all((await this.listSubscriptionIds()).map((id) => this.getSubscription(id)));
+    const allRecords = [...runs.filter(isDefined), ...subscriptions.filter(isDefined)];
+    const projectByScope = new Map<string, BusinessResearchProject>();
+    for (const record of allRecords) {
+      if (record.projectId !== undefined) continue;
+      const scope = projectScope(record.task.industry, record.task.competitors);
+      if (projectByScope.has(scope)) continue;
+      const id = parseBusinessResearchId('project', `project-legacy-${createHash('sha256').update(scope).digest('hex').slice(0, 24)}`);
+      if (id === undefined) throw new Error('Could not create a stable legacy project id.');
+      const scopedRecords = allRecords.filter((candidate) => projectScope(candidate.task.industry, candidate.task.competitors) === scope);
+      const timestamps = scopedRecords.map((candidate) => candidate.createdAt);
+      projectByScope.set(scope, {
+        id,
+        title: projectTitle(record.task.industry, record.task.competitors),
+        industry: record.task.industry,
+        competitors: [...record.task.competitors],
+        createdAt: Math.min(...timestamps),
+        updatedAt: Math.max(...scopedRecords.map((candidate) => candidate.updatedAt)),
+      });
+    }
+    // Validate all deterministic destinations before writing anything so a
+    // collision cannot partially migrate old runs or subscriptions.
+    for (const [scope, project] of projectByScope) {
+      const existing = await this.getProject(project.id);
+      if (existing !== undefined) {
+        if (projectScope(existing.industry, existing.competitors) !== scope) {
+          throw createCodeError(
+            'BUSINESS_RESEARCH_LEGACY_PROJECT_CONFLICT',
+            'Legacy project destination conflicts with an existing project.',
+          );
+        }
+        projectByScope.set(scope, existing);
+      }
+    }
+    for (const [scope, project] of projectByScope) {
+      projectByScope.set(scope, await this.saveLegacyProjectIfMissing(project, scope));
+    }
+    for (const run of runs.filter((item): item is BusinessResearchRunRecord => item !== undefined && item.projectId === undefined)) {
+      const project = projectByScope.get(projectScope(run.task.industry, run.task.competitors));
+      if (project !== undefined) await this.saveRun({ ...run, projectId: project.id });
+    }
+    for (const subscription of subscriptions.filter((item): item is BusinessResearchSubscriptionRecord => item !== undefined && item.projectId === undefined)) {
+      const project = projectByScope.get(projectScope(subscription.task.industry, subscription.task.competitors));
+      if (project !== undefined) await this.saveSubscription({ ...subscription, projectId: project.id });
+    }
+  }
+
+  private async saveLegacyProjectIfMissing(
+    project: BusinessResearchProject,
+    expectedScope: string,
+  ): Promise<BusinessResearchProject> {
+    let resolved = project;
+    await withFileLock(this.store.resolve(this.projectFile(project.id)), async () => {
+      const existing = await this.getProject(project.id);
+      if (existing !== undefined) {
+        if (projectScope(existing.industry, existing.competitors) !== expectedScope) {
+          throw createCodeError(
+            'BUSINESS_RESEARCH_LEGACY_PROJECT_CONFLICT',
+            'Legacy project destination conflicts with an existing project.',
+          );
+        }
+        resolved = existing;
+        return;
+      }
+      await this.saveProject(project);
+    });
+    return resolved;
+  }
+
+  private async listIds<Kind extends 'project' | 'run' | 'report' | 'subscription'>(
     kind: Kind,
     directory: string,
   ): Promise<ParsedBusinessResearchId<Kind>[]> {
@@ -403,6 +520,8 @@ function isRunRecord(value: unknown): value is BusinessResearchRunRecord {
   return parseBusinessResearchId('run', value.id) !== undefined &&
     isValidTaskInput(value.task) &&
     (value.mode === undefined || isBusinessResearchRunMode(value.mode)) &&
+    (value.projectId === undefined || parseBusinessResearchId('project', value.projectId) !== undefined) &&
+    (value.parentRunId === undefined || parseBusinessResearchId('run', value.parentRunId) !== undefined) &&
     isRunState(value.state) &&
     isEpoch(value.createdAt) &&
     isEpoch(value.updatedAt) &&
@@ -425,11 +544,37 @@ function isSubscription(value: unknown): value is BusinessResearchSubscriptionRe
   if (!isRecord(value)) return false;
   return parseBusinessResearchId('subscription', value.id) !== undefined &&
     isValidTaskInput(value.task) &&
+    (value.projectId === undefined || parseBusinessResearchId('project', value.projectId) !== undefined) &&
     Number.isInteger(value.intervalMs) && Number(value.intervalMs) >= MIN_INTERVAL_MS &&
     typeof value.enabled === 'boolean' &&
     isEpoch(value.createdAt) && isEpoch(value.updatedAt) && isEpoch(value.nextCheckAt) &&
     (value.lastCheckAt === undefined || isEpoch(value.lastCheckAt)) &&
     (value.removedAt === undefined || isEpoch(value.removedAt));
+}
+
+function assertProject(project: BusinessResearchProject): void {
+  if (!isProject(project)) throw createCodeError('BUSINESS_RESEARCH_INVALID_PROJECT', 'Invalid business research project.');
+}
+
+function isProject(value: unknown): value is BusinessResearchProject {
+  if (!isRecord(value)) return false;
+  return parseBusinessResearchId('project', value.id) !== undefined &&
+    typeof value.title === 'string' && value.title.trim().length > 0 && value.title.length <= 160 &&
+    typeof value.industry === 'string' && value.industry.trim().length > 0 && value.industry.length <= 120 &&
+    Array.isArray(value.competitors) && value.competitors.every((item) => typeof item === 'string' && item.length <= 120) &&
+    isEpoch(value.createdAt) && isEpoch(value.updatedAt) && value.updatedAt >= value.createdAt;
+}
+
+function projectScope(industry: string, competitors: readonly string[]): string {
+  return JSON.stringify([
+    industry.trim().toLocaleLowerCase('en-US'),
+    [...competitors].map((item) => item.trim().toLocaleLowerCase('en-US')).sort(),
+  ]);
+}
+
+function projectTitle(industry: string, competitors: readonly string[]): string {
+  const names = competitors.slice(0, 2).join(', ');
+  return `${industry}${names ? ` · ${names}` : ''}`.slice(0, 160);
 }
 
 function assertSubscription(record: BusinessResearchSubscriptionRecord): void {

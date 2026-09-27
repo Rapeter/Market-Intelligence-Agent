@@ -29,10 +29,6 @@ export function createCodeError(code: string, message: string, action?: string) 
   return error;
 }
 
-// Runtime-infrastructure classification lives on @finagent/core (shared by the
-// run manager and the renderer atoms); re-export here for shared-internal use.
-export { isRuntimeInfraCode } from '@finagent/core';
-
 function isErrorWithCode(error: unknown): error is Error & { code: string; action?: string } {
   return error instanceof Error && typeof (error as { code?: unknown }).code === 'string';
 }

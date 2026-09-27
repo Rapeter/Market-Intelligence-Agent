@@ -5,8 +5,15 @@ import type {
   BusinessResearchRunId,
   BusinessResearchTaskInput,
 } from '@finagent/core';
-import type { BusinessResearchToolPort, DecisionModelPort } from '@finagent/shared/business-research';
-import { runBusinessResearchLiveCounterfactuals } from './businessResearchLiveE2e';
+import type {
+  BusinessResearchRunRecord,
+  BusinessResearchToolPort,
+  DecisionModelPort,
+} from '@finagent/shared/business-research';
+import {
+  runBusinessResearchLiveCounterfactuals,
+  summarizeLiveMonitorFollowUpRun,
+} from './businessResearchLiveE2e';
 
 const task: BusinessResearchTaskInput = {
   industry: 'Electric vehicles',
@@ -30,6 +37,27 @@ function evidence(index: number, grade: BusinessResearchEvidence['grade'] = 'pag
 }
 
 describe('live business-research counterfactual probes', () => {
+  it('summarizes the persisted monitor run with its project attribution', () => {
+    expect(summarizeLiveMonitorFollowUpRun({
+      id: 'run-monitor-follow-up' as BusinessResearchRunRecord['id'],
+      projectId: 'project-northstar' as BusinessResearchRunRecord['projectId'],
+      mode: 'live',
+      task,
+      state: { status: 'completed', completedAt: '2026-09-24T00:00:00.000Z' },
+      createdAt: 1_790_208_000_000,
+      updatedAt: 1_790_208_000_000,
+      reportId: 'report-monitor-follow-up' as BusinessResearchRunRecord['reportId'],
+    })).toMatchObject({
+      id: 'run-monitor-follow-up',
+      projectId: 'project-northstar',
+      mode: 'live',
+      status: 'completed',
+      reportId: 'report-monitor-follow-up',
+      failureCode: null,
+    });
+    expect(summarizeLiveMonitorFollowUpRun(undefined)).toBeNull();
+  });
+
   it('compares the same task with empty versus opened public page evidence for two competitors', async () => {
     const searched: string[] = [];
     const opened: string[] = [];

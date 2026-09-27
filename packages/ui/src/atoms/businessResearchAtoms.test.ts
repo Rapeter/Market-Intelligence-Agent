@@ -10,14 +10,12 @@ import {
 } from './businessResearchAtoms';
 
 describe('business research workspace state', () => {
-  it('starts in a safe fixture mode with an empty, editable research form', () => {
+  it('starts in a safe fixture mode with the default strategy selected', () => {
     const store = createStore();
 
     expect(store.get(businessResearchModeAtom)).toBe('fixture');
     expect(store.get(businessResearchFormAtom)).toEqual({
-      industry: '',
       question: '',
-      competitorsText: '',
       strategyId: 'industry_overview',
     });
     expect(store.get(businessResearchRunsAtom)).toEqual([]);
@@ -28,6 +26,7 @@ describe('business research workspace state', () => {
     const runId = parseBusinessResearchId('run', 'run-visible')!;
     const run = {
       id: runId,
+      projectId: parseBusinessResearchId('project', 'project-visible')!,
       task: {
         industry: 'Renewable energy',
         question: 'What changed?',

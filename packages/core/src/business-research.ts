@@ -3,6 +3,7 @@ declare const idBrand: unique symbol;
 type Brand<T extends string, Name extends string> = T & { readonly [idBrand]: Name };
 
 export type BusinessResearchIdKind =
+  | 'project'
   | 'source'
   | 'evidence'
   | 'run'
@@ -44,6 +45,7 @@ export function isBusinessResearchRunMode(value: unknown): value is BusinessRese
 }
 
 export type BusinessResearchSourceId = BusinessResearchId<'source'>;
+export type BusinessResearchProjectId = BusinessResearchId<'project'>;
 export type BusinessResearchEvidenceId = BusinessResearchId<'evidence'>;
 export type BusinessResearchRunId = BusinessResearchId<'run'>;
 export type BusinessResearchReportId = BusinessResearchId<'report'>;
@@ -51,7 +53,17 @@ export type BusinessResearchClaimId = BusinessResearchId<'claim'>;
 export type BusinessResearchSubscriptionId = BusinessResearchId<'subscription'>;
 export type BusinessResearchEventId = BusinessResearchId<'event'>;
 
+export interface BusinessResearchProject {
+  id: BusinessResearchProjectId;
+  title: string;
+  industry: string;
+  competitors: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 const BUSINESS_RESEARCH_ID_KINDS = [
+  'project',
   'source',
   'evidence',
   'run',

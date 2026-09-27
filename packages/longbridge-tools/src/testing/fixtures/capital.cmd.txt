@@ -1,1 +1,0 @@
-longbridge capital NVDA.US --format json

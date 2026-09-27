@@ -4,6 +4,32 @@ import { dirname, join } from 'node:path';
 import { createCodeError } from '../agent/errors.ts';
 
 const publishLocks = new Map<string, Promise<void>>();
+const WINDOWS_RENAME_RETRY_DELAYS_MS = [25, 50, 100, 200, 400] as const;
+const WINDOWS_TRANSIENT_RENAME_ERRORS = new Set(['EPERM', 'EACCES', 'EBUSY']);
+
+/** Retry short-lived Windows file locks without hiding permanent rename failures. */
+export async function renameWithTransientRetry(
+  operation: (source: string, target: string) => Promise<void>,
+  source: string,
+  target: string,
+  platform: NodeJS.Platform = process.platform,
+  wait: (milliseconds: number) => Promise<void> = (milliseconds) =>
+    new Promise((resolve) => setTimeout(resolve, milliseconds)),
+): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await operation(source, target);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException | null)?.code;
+      const delay = WINDOWS_RENAME_RETRY_DELAYS_MS[attempt];
+      if (platform !== 'win32' || delay === undefined || !WINDOWS_TRANSIENT_RENAME_ERRORS.has(code ?? '')) {
+        throw error;
+      }
+      await wait(delay);
+    }
+  }
+}
 
 /**
  * Serialize only the final replacement for a target. Temporary files can be
@@ -15,7 +41,7 @@ async function publish(target: string, tmp: string): Promise<void> {
   let current: Promise<void>;
   current = previous
     .catch(() => undefined)
-    .then(() => rename(tmp, target));
+    .then(() => renameWithTransientRetry(rename, tmp, target));
   publishLocks.set(target, current);
   try {
     await current;
@@ -66,19 +92,35 @@ export class JsonFileStore {
     const target = join(this.rootDir, file);
     const tmp = `${target}.${randomUUID()}.tmp`;
     let ownsTemp = false;
+    let phase = 'serialize';
     try {
       const contents = `${JSON.stringify(data, null, 2)}\n`;
+      phase = 'mkdir';
       await mkdir(dirname(target), { recursive: true });
+      phase = 'open';
       const handle = await open(tmp, 'wx', 0o600);
       ownsTemp = true;
       try {
+        phase = 'write';
         await handle.writeFile(contents, 'utf8');
       } finally {
+        phase = 'close';
         await handle.close();
       }
+      phase = 'publish';
       await publish(target, tmp);
       ownsTemp = false;
     } catch (error) {
+      if (process.env.FINAGENT_E2E === '1') {
+        const filesystemError = error as NodeJS.ErrnoException;
+        console.warn('[JsonFileStore] Write failed during E2E diagnostics.', {
+          file,
+          phase,
+          code: filesystemError.code ?? 'UNKNOWN',
+          syscall: filesystemError.syscall ?? null,
+          errno: filesystemError.errno ?? null,
+        });
+      }
       throw createCodeError(
         'STORAGE_WRITE_FAILED',
         `Failed to write ${file}: ${error instanceof Error ? error.message : String(error)}`

@@ -26,6 +26,8 @@ function setup() {
   const runId = parseBusinessResearchId('run', 'run-ui-live')!;
   const reportId = parseBusinessResearchId('report', 'report-ui-live')!;
   const subscriptionId = parseBusinessResearchId('subscription', 'subscription-ui')!;
+  const projectId = parseBusinessResearchId('project', 'project-ui-ev')!;
+  const project = { id: projectId, title: 'EV public market review', industry: 'Electric vehicles', competitors: ['Northstar', 'Southwind'], createdAt: 1, updatedAt: 1 };
   const evidenceId = parseBusinessResearchId('evidence', 'evidence-ui-live')!;
   const fixtureEvidenceId = parseBusinessResearchId('evidence', 'evidence-ui-fixture')!;
   const sourceId = parseBusinessResearchId('source', 'source-ui-live')!;
@@ -36,8 +38,10 @@ function setup() {
     competitors: ['Northstar', 'Southwind'],
     strategyId: 'competitor_deep_dive' as const,
   };
+  const subscribeCalls: Array<{ task: typeof task; intervalMs: number; projectId: typeof projectId }> = [];
   const run = {
     id: runId,
+    projectId,
     task,
     mode: 'live' as const,
     state: { status: 'completed' as const, completedAt: 1_800_000_000_000 },
@@ -100,6 +104,7 @@ function setup() {
     { runId, sequence: 4, timestamp: 4, type: 'run_terminal', outcome: { status: 'completed' } },
   ];
   const api = {
+    listProjects: async () => ({ ok: true, data: [project] }),
     getCredentialStatus: async () => ({ ok: true, data: { configured: false } }),
     setBraveKey: async () => ({ ok: true, data: { configured: true } }),
     removeBraveKey: async () => ({ ok: true, data: { configured: false } }),
@@ -128,9 +133,10 @@ function setup() {
       automaticTrigger: { precision: { numerator: 2, denominator: 2, rate: 1 }, recall: { numerator: 2, denominator: 2, rate: 1 } },
       latency: { run: { sampleCount: 22, p50: 140, p95: 240, max: 500 }, tool: { sampleCount: 30, p95: 40 } },
     } }),
-    subscribe: async (input: typeof task, intervalMs = 24 * 60 * 60 * 1_000) => {
+    subscribe: async (input: typeof task, intervalMs = 24 * 60 * 60 * 1_000, inputProjectId: typeof projectId = projectId) => {
+      subscribeCalls.push({ task: input, intervalMs, projectId: inputProjectId });
       monitorActions.push(`subscribe:${intervalMs}`);
-      const subscription = { id: subscriptionId, task: input, intervalMs, enabled: true, createdAt: 5, updatedAt: 5, nextCheckAt: 10 };
+      const subscription = { id: subscriptionId, projectId: inputProjectId, task: input, intervalMs, enabled: true, createdAt: 5, updatedAt: 5, nextCheckAt: 10 };
       const oldIndex = subscriptions.findIndex((item) => item.id === subscriptionId);
       if (oldIndex >= 0) subscriptions.splice(oldIndex, 1);
       subscriptions.unshift(subscription);
@@ -153,12 +159,12 @@ function setup() {
       subscriptions.splice(0, subscriptions.length);
       return { ok: true, data: undefined };
     },
-    listSubscriptions: async () => ({ ok: true, data: subscriptions }),
+    listSubscriptions: async () => ({ ok: true, data: [...subscriptions] }),
     listChecks: async (input: string) => ({ ok: true, data: checksBySubscription.get(input) ?? [] }),
     checkDue: async () => { monitorActions.push('probe'); return { ok: true, data: [] }; },
   };
   const client = { ...fallbackClient, businessResearch: api } as unknown as FinagentClient;
-  return { calls, client, monitorActions, subscriptions, checksBySubscription };
+  return { calls, client, monitorActions, projectId, subscribeCalls, subscriptions, checksBySubscription, task };
 }
 
 async function renderWorkspace(client: FinagentClient) {
@@ -192,40 +198,26 @@ async function renderWorkspace(client: FinagentClient) {
   };
 }
 
-it('labels fixture runs as illustrative and validates the minimum competitor count before starting', async () => {
-  const { calls, client } = setup();
+it('opens on a selected project and leaves new research questions to the Agent panel', async () => {
+  const { client } = setup();
   const view = await renderWorkspace(client);
   try {
     expect(view.container.textContent).toContain('publicly accessible information only');
     expect(view.container.textContent).toContain('biased signal');
     expect(view.container.textContent).toContain('illustrative records');
-    await view.click('[data-testid="business-research-start"]');
-    expect(view.container.querySelector('[role="alert"]')?.textContent).toContain('2–4 distinct competitors');
-    expect(calls).toEqual([]);
+    expect(view.container.textContent).toContain('EV public market review');
+    expect(view.container.querySelector('[data-testid="business-research-start"]')).toBeNull();
   } finally {
     await view.cleanup();
   }
 });
 
-it('starts an explicitly live run, then renders its selected task facet, evidence grade, and cited report', async () => {
-  const { calls, client } = setup();
+it('hydrates a project run with its task, evidence grade, and cited report', async () => {
+  const { client } = setup();
   const view = await renderWorkspace(client);
   try {
-    await act(async () => {
-      view.store.set(businessResearchFormAtom, {
-        industry: 'Electric vehicles',
-        question: 'Compare public launch activity.',
-        competitorsText: 'Northstar\nSouthwind',
-        strategyId: 'competitor_deep_dive',
-      });
-      view.container.querySelector<HTMLButtonElement>('[data-testid="business-research-mode-live"]')!.click();
-      await new Promise((resolve) => setTimeout(resolve, 5));
-    });
-    await view.click('[data-testid="business-research-start"]');
-
     expect(view.container.querySelector('[role="alert"]')?.textContent).toBeUndefined();
-    expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatchObject({ industry: 'Electric vehicles', competitors: ['Northstar', 'Southwind'], mode: 'live' });
+    expect(view.container.textContent).toContain('Compare public launch activity.');
     expect(view.container.textContent).toContain('Competitor products');
     expect(view.container.textContent).toContain('Public page text');
     expect(view.container.textContent).toContain('A public launch announcement was found.');
@@ -256,8 +248,8 @@ it('shows each topic’s own latest monitor check and refreshes newly completed 
     strategyId: 'change_risk_tracking',
   });
   subscriptions.push(
-    { id: firstId, task: monitorTask('Electric vehicles'), intervalMs: 3_600_000, enabled: true, createdAt: 1, updatedAt: 1, nextCheckAt: 2 },
-    { id: secondId, task: monitorTask('Battery storage'), intervalMs: 3_600_000, enabled: true, createdAt: 1, updatedAt: 1, nextCheckAt: 2 },
+    { id: firstId, projectId: parseBusinessResearchId('project', 'project-ui-ev')!, task: monitorTask('Electric vehicles'), intervalMs: 3_600_000, enabled: true, createdAt: 1, updatedAt: 1, nextCheckAt: 2 },
+    { id: secondId, projectId: parseBusinessResearchId('project', 'project-ui-ev')!, task: monitorTask('Battery storage'), intervalMs: 3_600_000, enabled: true, createdAt: 1, updatedAt: 1, nextCheckAt: 2 },
   );
   checksBySubscription.set(secondId, [{
     id: secondCheckId,
@@ -296,22 +288,25 @@ it('shows each topic’s own latest monitor check and refreshes newly completed 
   }
 });
 
-it('subscribes, pauses, resumes, and removes a topic without running a due check on mount', async () => {
-  const { client, monitorActions } = setup();
+it('subscribes to the selected run within its project and persists monitor controls without probing on mount', async () => {
+  const { client, monitorActions, projectId, subscribeCalls, task } = setup();
   const view = await renderWorkspace(client);
   try {
     expect(view.container.textContent).toContain('No topics are being tracked.');
     expect(monitorActions).toEqual([]);
     await act(async () => {
       view.store.set(businessResearchFormAtom, {
-        industry: 'Electric vehicles',
-        question: 'Track public launch activity.',
-        competitorsText: 'Northstar\nSouthwind',
         strategyId: 'change_risk_tracking',
+        question: '',
       });
     });
     await view.click('[data-testid="business-research-subscribe-monitor"]');
     expect(monitorActions[0]).toBe('subscribe:86400000');
+    expect(subscribeCalls[0]).toEqual({
+      task,
+      intervalMs: 24 * 60 * 60 * 1_000,
+      projectId,
+    });
     expect(view.container.textContent).toContain('Electric vehicles · Northstar, Southwind');
 
     await view.click('[aria-label="Pause"]');

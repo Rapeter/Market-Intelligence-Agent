@@ -69,6 +69,37 @@ function deferred<T = void>() {
 }
 
 describe('BusinessResearchService', () => {
+  it('creates a project and keeps follow-up research runs linked to the same project', async () => {
+    const repository = new BusinessResearchRepository(tempStore());
+    const service = new BusinessResearchService(repository, {
+      createDecisionModel: () => ({ async decide() { return { kind: 'finish', rationale: 'No additional source needed.' }; } }),
+      createTools: () => ({
+        async searchWeb() { return []; },
+        async openSource(evidenceId) { return { ...evidence('unused', ''), id: evidenceId, grade: 'page_text' }; },
+      }),
+      async generateReport() { return { title: 'Unresolved research', claims: [], monitoringActions: [] }; },
+      idFactory: (kind, sequence) => `${kind}-project-test-${sequence}`,
+    });
+
+    const project = await service.createProject({
+      title: 'EV market entry',
+      industry: 'Electric vehicles',
+      competitors: ['Northstar Motors', 'Harbor Auto'],
+    });
+    const first = await service.start(taskInput(), { projectId: project.id, mode: 'fixture' });
+    await service.waitForRun(first.id);
+    const followUp = await service.start({ ...taskInput(), question: 'Compare public pricing updates' }, {
+      projectId: project.id,
+      parentRunId: first.id,
+      mode: 'fixture',
+    });
+
+    expect(first.projectId).toBe(project.id);
+    expect(followUp.projectId).toBe(project.id);
+    expect(followUp.parentRunId).toBe(first.id);
+    expect(await repository.listProjects()).toEqual([project]);
+  });
+
   it('persists the selected fixture mode and passes it to every run adapter', async () => {
     const repository = new BusinessResearchRepository(tempStore());
     const observed: string[] = [];
@@ -248,7 +279,7 @@ describe('BusinessResearchService', () => {
     const disabled = await service.unsubscribe(subscription.id);
     expect(disabled).toBeDefined();
     expect(disabled?.enabled).toBe(false);
-    expect(await service.listSubscriptions()).toEqual([disabled!]);
+    expect(await service.listSubscriptions()).toMatchObject([{ ...disabled!, projectId: expect.any(String) }]);
   });
 
   it('resumes paused subscriptions and removes them without erasing their check history', async () => {

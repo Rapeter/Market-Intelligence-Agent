@@ -7,8 +7,8 @@ import { useFinagentClient, type AboutInfo } from '../../client';
 // which point `client.about.get()` supplies the authoritative values —
 // including the real build SHA via FINAGENT_BUILD_SHA.
 const FALLBACK_INFO: AboutInfo = {
-  version: '0.4.0-beta.1',
-  channel: 'beta',
+  version: '0.1.0-alpha.1',
+  channel: 'alpha',
   build: 'dev',
 };
 
