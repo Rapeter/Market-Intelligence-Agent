@@ -50,10 +50,10 @@ try {
   }
 
   console.log(`Starting Enterprise Research Workbench at ${rendererUrl}`);
+  // Electron is a GUI process; windowsHide also suppresses its BrowserWindow on Windows.
   electronProcess = spawn(electronBinary, electronArgs, {
     cwd: repoRoot,
     stdio: 'inherit',
-    windowsHide: true,
     env: {
       ...process.env,
       FINAGENT_DEV_SERVER_URL: rendererUrl,

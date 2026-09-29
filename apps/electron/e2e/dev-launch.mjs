@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { createWriteStream, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -33,7 +33,8 @@ try {
     env: {
       ...process.env,
       FINAGENT_E2E_CDP_PORT: String(cdpPort),
-      FINAGENT_E2E_HIDDEN: '1',
+      FINAGENT_E2E_HIDDEN: '0',
+      FINAGENT_E2E_VISIBLE: '1',
       FINAGENT_USER_DATA_DIR: userDataDirectory,
       FINAGENT_FORCE_PROD_LOAD: '0',
     },
@@ -52,6 +53,12 @@ try {
   await page.waitForFunction(() => Boolean(window.electronAPI?.businessResearch), null, { timeout: 30_000 });
   await page.getByTestId('sidebar').waitFor({ state: 'visible', timeout: 15_000 });
   await page.getByRole('button', { name: 'New project', exact: true }).waitFor({ state: 'visible', timeout: 15_000 });
+  const visibleWindowPid = execFileSync('powershell.exe', [
+    '-NoProfile',
+    '-Command',
+    "$window = Get-Process electron -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -eq 'Enterprise Research Workbench' -and $_.MainWindowHandle -ne 0 } | Select-Object -First 1; if ($null -eq $window) { exit 1 }; $window.Id",
+  ], { encoding: 'utf8' }).trim();
+  assert.match(visibleWindowPid, /^\d+$/, 'The Electron BrowserWindow must be visible to the user.');
 
   const rendererUrl = new URL(page.url());
   assert.equal(rendererUrl.hostname, '127.0.0.1', 'The development renderer must bind to loopback only.');
