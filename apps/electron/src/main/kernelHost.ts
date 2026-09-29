@@ -53,7 +53,7 @@ import {
   summarizeLiveMonitorFollowUpRun,
 } from './businessResearchLiveE2e.ts';
 import { retryTransientMonitorProbe } from './businessResearchMonitorRetry.ts';
-import { resolveBundledPiCliEntry } from './piRuntime.ts';
+import { resolveBundledPiCliEntry, resolvePiRuntimeAppPath } from './piRuntime.ts';
 import { isBusinessResearchLiveE2eEnabled } from '../businessResearchLiveE2eMode.ts';
 import { mainErrorLog } from './ipcResult.ts';
 
@@ -631,7 +631,7 @@ export class AgentKernelHost {
 
 function createBusinessResearchPiArgs(sessionDirectory: string, useBundledPiRuntime: boolean): string[] {
   const entryOrPackage = useBundledPiRuntime
-    ? resolveBundledPiCliEntry(app.getAppPath())
+    ? resolveBundledPiCliEntry(resolvePiRuntimeAppPath(app.isPackaged, app.getAppPath(), process.argv[1]))
     : '@earendil-works/pi-coding-agent';
   const args = [entryOrPackage, '--mode', 'rpc', '--provider', process.env.FINAGENT_PI_PROVIDER ?? 'anthropic'];
   const model = process.env.FINAGENT_PI_MODEL ?? process.env.ANTHROPIC_MODEL;

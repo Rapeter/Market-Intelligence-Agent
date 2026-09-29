@@ -9,6 +9,7 @@ import { writeSupportBundle } from '@finagent/shared/diagnostics';
 import { loadFinagentEnv } from './loadEnv.ts';
 import { getRuntimeRoot } from '@finagent/shared/resources';
 import { legacyEnterpriseResearchUserDataPath } from './userDataPath.ts';
+import { getDevServerUrl } from './devServerUrl.ts';
 let mainWindow: BrowserWindow | null = null;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const appRoot = join(__dirname, '../..');
@@ -64,7 +65,7 @@ function createWindow() {
 
   // Load the app
   if (isDev && process.env.FINAGENT_FORCE_PROD_LOAD !== '1') {
-    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.loadURL(getDevServerUrl(process.env.FINAGENT_DEV_SERVER_URL));
     if (process.env.FINAGENT_OPEN_DEVTOOLS === '1') {
       mainWindow.webContents.openDevTools();
     }

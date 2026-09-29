@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit",
     "test:e2e": "node e2e/business-research.mjs",
     "test:e2e:visible": "node e2e/business-research.mjs --visible",
+    "test:e2e:dev-launch": "node e2e/dev-launch.mjs",
     "test:e2e:business-research": "node e2e/business-research.mjs",
     "test:e2e:business-research:live": "node e2e/business-research-live.mjs",
     "business-research:live-profile": "node e2e/business-research-live-profile.mjs",

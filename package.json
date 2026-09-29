@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "bun run vite:dev",
+    "dev": "node scripts/dev-desktop.mjs",
     "vite:dev": "cd apps/electron && bunx vite",
     "build": "bun run build:packages && bun run build:electron",
     "build:packages": "bun run --filter './packages/*' build",
@@ -19,6 +19,7 @@
     "test:ui": "bun test packages/ui",
     "test:e2e": "cd apps/electron && bun run test:e2e",
     "test:e2e:visible": "cd apps/electron && bun run test:e2e:visible",
+    "test:e2e:dev-launch": "cd apps/electron && bun run test:e2e:dev-launch",
     "test:package-smoke": "cd apps/electron && bun run test:package-smoke",
     "test:installer-smoke": "cd apps/electron && bun run test:installer-smoke",
     "test:release": "bun run release:check",
